@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+:root {
+  --font-inter: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-body: var(--font-inter);
+  
+  /* Senior Matte Palette */
+  --bg-page: #0A0A0A;
+  --bg-surface: #121212;
+  --border-subtle: #242424;
+  --text-primary: #FFFFFF;
+  --text-secondary: #8E8E93;
+  
+  /* Semantic */
+  --color-success: #10B981;
+  --color-danger: #EF4444;
+  --color-warning: #F59E0B;
+}
+
+body {
+  font-family: var(--font-inter);
+  background-color: #0A0A0A;
+  color: #FFFFFF;
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.font-body {
+  font-family: var(--font-inter);
+}

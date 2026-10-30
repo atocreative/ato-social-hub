@@ -1,0 +1,1289 @@
+{
+  "backedUpAt": "2026-10-30T05:48:07.971Z",
+  "files": {
+    "database.json": {
+      "tenants": [],
+      "rawDriveItems": [
+        {
+          "driveFileId": "1uV-Eb59I8fSchZBvqK9Q7xLqVR1zijGZ",
+          "nome": "01_Post.png",
+          "categoria": "Post Único",
+          "loteNome": "Ato - 1 24-10 - 01 Post unico",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1uV-Eb59I8fSchZBvqK9Q7xLqVR1zijGZ&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1uV-Eb59I8fSchZBvqK9Q7xLqVR1zijGZ&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1uV-Eb59I8fSchZBvqK9Q7xLqVR1zijGZ",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 1,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/1WcmaGomaH_pi2b1eH6Rvm1vAHYT8tOjg"
+        },
+        {
+          "driveFileId": "1XmXuBGiYrjUu5gfhX1ldT4jVUVG8gSgO",
+          "nome": "01_Post.png",
+          "categoria": "Post Único",
+          "loteNome": "Ato - 1 24-10 - 02 Post unico",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1XmXuBGiYrjUu5gfhX1ldT4jVUVG8gSgO&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1XmXuBGiYrjUu5gfhX1ldT4jVUVG8gSgO&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1XmXuBGiYrjUu5gfhX1ldT4jVUVG8gSgO",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 1,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/1jy8IZll9YIdAgpTQbt90LRZcd_nD19Uf"
+        },
+        {
+          "driveFileId": "1jz9z16VfkoVNrZxM7sf3YWGgBhSZe4-G",
+          "nome": "01_Story.png",
+          "categoria": "Story",
+          "loteNome": "Ato - 1 24-10 - 03 Story",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1jz9z16VfkoVNrZxM7sf3YWGgBhSZe4-G&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1jz9z16VfkoVNrZxM7sf3YWGgBhSZe4-G&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1jz9z16VfkoVNrZxM7sf3YWGgBhSZe4-G",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 1,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/1v7Mvl0J5sDN_-U0WWpMTC1Hb0_6_MdFv"
+        },
+        {
+          "driveFileId": "1lCNTPg22_jcWfCyB7i_GfrK-RDewmf4Z",
+          "nome": "01_Capa.png",
+          "categoria": "Carrossel",
+          "loteNome": "Ato - 2 23-10 - 01 Carrossel",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1lCNTPg22_jcWfCyB7i_GfrK-RDewmf4Z&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1lCNTPg22_jcWfCyB7i_GfrK-RDewmf4Z&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1lCNTPg22_jcWfCyB7i_GfrK-RDewmf4Z",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 1,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/12qkDusghffSa9DZEwOtHvup-JOnGsAW8"
+        },
+        {
+          "driveFileId": "183RFjOsY7pbFXyZyS1PvfaFR1nuNAaNr",
+          "nome": "02_Interna.png",
+          "categoria": "Carrossel",
+          "loteNome": "Ato - 2 23-10 - 01 Carrossel",
+          "viewUrl": "https://drive.google.com/thumbnail?id=183RFjOsY7pbFXyZyS1PvfaFR1nuNAaNr&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=183RFjOsY7pbFXyZyS1PvfaFR1nuNAaNr&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=183RFjOsY7pbFXyZyS1PvfaFR1nuNAaNr",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 2,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/12qkDusghffSa9DZEwOtHvup-JOnGsAW8"
+        },
+        {
+          "driveFileId": "1wnMsr_asYYcUBRuXQzyr6FS1Ul1Pq1Zw",
+          "nome": "03_Interna.png",
+          "categoria": "Carrossel",
+          "loteNome": "Ato - 2 23-10 - 01 Carrossel",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1wnMsr_asYYcUBRuXQzyr6FS1Ul1Pq1Zw&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1wnMsr_asYYcUBRuXQzyr6FS1Ul1Pq1Zw&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1wnMsr_asYYcUBRuXQzyr6FS1Ul1Pq1Zw",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 3,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/12qkDusghffSa9DZEwOtHvup-JOnGsAW8"
+        },
+        {
+          "driveFileId": "1BI5YuRpzrOuSKiYL2tCkVzJX48KZfWHX",
+          "nome": "04_Fechamento.png",
+          "categoria": "Carrossel",
+          "loteNome": "Ato - 2 23-10 - 01 Carrossel",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1BI5YuRpzrOuSKiYL2tCkVzJX48KZfWHX&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1BI5YuRpzrOuSKiYL2tCkVzJX48KZfWHX&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1BI5YuRpzrOuSKiYL2tCkVzJX48KZfWHX",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 4,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/12qkDusghffSa9DZEwOtHvup-JOnGsAW8"
+        },
+        {
+          "driveFileId": "1ti66mGb0g1Bh6MJqbo51ibrRL14otOl6",
+          "nome": "01_Post.png",
+          "categoria": "Post Único",
+          "loteNome": "Ato - 2 23-10 - 02 Post unico",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1ti66mGb0g1Bh6MJqbo51ibrRL14otOl6&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1ti66mGb0g1Bh6MJqbo51ibrRL14otOl6&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1ti66mGb0g1Bh6MJqbo51ibrRL14otOl6",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 1,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/1lk3SgbWip8hl38D_B16hXujpDzNbLNnY"
+        },
+        {
+          "driveFileId": "1PZ2G5_jiQDM8m5uiBXKkdwUUq63zi2LS",
+          "nome": "01_Story.png",
+          "categoria": "Story",
+          "loteNome": "Ato - 2 23-10 - 03 Story",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1PZ2G5_jiQDM8m5uiBXKkdwUUq63zi2LS&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1PZ2G5_jiQDM8m5uiBXKkdwUUq63zi2LS&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1PZ2G5_jiQDM8m5uiBXKkdwUUq63zi2LS",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 1,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/1KHXLNluTBiC-y2ELrl2fyX_t-CzRetz7"
+        },
+        {
+          "driveFileId": "1xiAf87m_gh_tdMXEUatasAsbP9BJ2JaA",
+          "nome": "01_Capa.png",
+          "categoria": "Carrossel",
+          "loteNome": "Ato - 3 23-10 - 01 Carrossel",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1xiAf87m_gh_tdMXEUatasAsbP9BJ2JaA&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1xiAf87m_gh_tdMXEUatasAsbP9BJ2JaA&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1xiAf87m_gh_tdMXEUatasAsbP9BJ2JaA",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 1,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/1eaWLsjszSIzX23xdGoilDn0gi9_X2qEC"
+        },
+        {
+          "driveFileId": "1sIQmgsz5Hf6vF30qD86OOu-qxaPo_Tok",
+          "nome": "02_Interna.png",
+          "categoria": "Carrossel",
+          "loteNome": "Ato - 3 23-10 - 01 Carrossel",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1sIQmgsz5Hf6vF30qD86OOu-qxaPo_Tok&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1sIQmgsz5Hf6vF30qD86OOu-qxaPo_Tok&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1sIQmgsz5Hf6vF30qD86OOu-qxaPo_Tok",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 2,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/1eaWLsjszSIzX23xdGoilDn0gi9_X2qEC"
+        },
+        {
+          "driveFileId": "1kEoAUQqVPpndxkRnwsSlXm39erRgYHtl",
+          "nome": "03_Interna.png",
+          "categoria": "Carrossel",
+          "loteNome": "Ato - 3 23-10 - 01 Carrossel",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1kEoAUQqVPpndxkRnwsSlXm39erRgYHtl&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1kEoAUQqVPpndxkRnwsSlXm39erRgYHtl&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1kEoAUQqVPpndxkRnwsSlXm39erRgYHtl",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 3,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/1eaWLsjszSIzX23xdGoilDn0gi9_X2qEC"
+        },
+        {
+          "driveFileId": "1xdBrmkkb9DBj12t5980O0K8fJUAYPKOE",
+          "nome": "04_Fechamento.png",
+          "categoria": "Carrossel",
+          "loteNome": "Ato - 3 23-10 - 01 Carrossel",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1xdBrmkkb9DBj12t5980O0K8fJUAYPKOE&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1xdBrmkkb9DBj12t5980O0K8fJUAYPKOE&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1xdBrmkkb9DBj12t5980O0K8fJUAYPKOE",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 4,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/1eaWLsjszSIzX23xdGoilDn0gi9_X2qEC"
+        },
+        {
+          "driveFileId": "1KLxxTaa0hzZw9jDaOFeZXLg9lVtItS3K",
+          "nome": "01_Post.png",
+          "categoria": "Post Único",
+          "loteNome": "Ato - 3 23-10 - 02 Post unico",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1KLxxTaa0hzZw9jDaOFeZXLg9lVtItS3K&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1KLxxTaa0hzZw9jDaOFeZXLg9lVtItS3K&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1KLxxTaa0hzZw9jDaOFeZXLg9lVtItS3K",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 1,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/1hikJ2x7rFObbOsHyquVgxXst5N-4lVx7"
+        },
+        {
+          "driveFileId": "1ifw98-kJ0loOg6lkgWpvtxZg_48Ny1o0",
+          "nome": "01_Story_v02.png",
+          "categoria": "Story",
+          "loteNome": "Ato - 3 23-10 - 03 Story",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1ifw98-kJ0loOg6lkgWpvtxZg_48Ny1o0&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1ifw98-kJ0loOg6lkgWpvtxZg_48Ny1o0&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1ifw98-kJ0loOg6lkgWpvtxZg_48Ny1o0",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 1,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/14OKYmVBIgq93lPp00LbkO_7mN1AMYosf"
+        },
+        {
+          "driveFileId": "1E4uFIzuxF3NRtW6ts5jtHGZgzoSKJANa",
+          "nome": "01_Capa.png",
+          "categoria": "Carrossel",
+          "loteNome": "Ato - 1 25-10 - 01 Carrossel",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1E4uFIzuxF3NRtW6ts5jtHGZgzoSKJANa&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1E4uFIzuxF3NRtW6ts5jtHGZgzoSKJANa&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1E4uFIzuxF3NRtW6ts5jtHGZgzoSKJANa",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 1,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/1E_-H_11zuob5_03DB6XlDX89ll6Gcktt"
+        },
+        {
+          "driveFileId": "1gsEBMiwGvjbcwa1VWlLBn0S8v6FwYvYJ",
+          "nome": "02_Interna.png",
+          "categoria": "Carrossel",
+          "loteNome": "Ato - 1 25-10 - 01 Carrossel",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1gsEBMiwGvjbcwa1VWlLBn0S8v6FwYvYJ&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1gsEBMiwGvjbcwa1VWlLBn0S8v6FwYvYJ&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1gsEBMiwGvjbcwa1VWlLBn0S8v6FwYvYJ",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 2,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/1E_-H_11zuob5_03DB6XlDX89ll6Gcktt"
+        },
+        {
+          "driveFileId": "1wns6gQ56jGquajklwDXLgNMCaaBNu3S7",
+          "nome": "03_Interna.png",
+          "categoria": "Carrossel",
+          "loteNome": "Ato - 1 25-10 - 01 Carrossel",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1wns6gQ56jGquajklwDXLgNMCaaBNu3S7&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1wns6gQ56jGquajklwDXLgNMCaaBNu3S7&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1wns6gQ56jGquajklwDXLgNMCaaBNu3S7",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 3,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/1E_-H_11zuob5_03DB6XlDX89ll6Gcktt"
+        },
+        {
+          "driveFileId": "1Wfbhxxy3aVrPVwwhyT-wRAVFcVrWlU31",
+          "nome": "04_Fechamento.png",
+          "categoria": "Carrossel",
+          "loteNome": "Ato - 1 25-10 - 01 Carrossel",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1Wfbhxxy3aVrPVwwhyT-wRAVFcVrWlU31&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1Wfbhxxy3aVrPVwwhyT-wRAVFcVrWlU31&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1Wfbhxxy3aVrPVwwhyT-wRAVFcVrWlU31",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 4,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/1E_-H_11zuob5_03DB6XlDX89ll6Gcktt"
+        },
+        {
+          "driveFileId": "1AieZ5z5XZSAgHnQi909JPEYdAyjeWbqb",
+          "nome": "01_Post.png",
+          "categoria": "Post Único",
+          "loteNome": "Ato - 1 25-10 - 02 Post unico",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1AieZ5z5XZSAgHnQi909JPEYdAyjeWbqb&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1AieZ5z5XZSAgHnQi909JPEYdAyjeWbqb&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1AieZ5z5XZSAgHnQi909JPEYdAyjeWbqb",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 1,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/1uSo3yNxSZs--KRA7HsUHsKK5wkeJBFZ2"
+        },
+        {
+          "driveFileId": "1sRb_Z4iuJXYhakNP9tTIGdxl3MKVd_pl",
+          "nome": "01_Story.png",
+          "categoria": "Story",
+          "loteNome": "Ato - 1 25-10 - 03 Story",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1sRb_Z4iuJXYhakNP9tTIGdxl3MKVd_pl&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1sRb_Z4iuJXYhakNP9tTIGdxl3MKVd_pl&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1sRb_Z4iuJXYhakNP9tTIGdxl3MKVd_pl",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 1,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/1KBuDAPlrbIo24Zv67AhwK6A8k1un_Kaq"
+        },
+        {
+          "driveFileId": "1--ojwIkH0WFhD_nQMkWRjSGLrWGpW02Z",
+          "nome": "Gemini_Generated_Image_fsraw4fsraw4fsra.jpg",
+          "categoria": "Post Único",
+          "loteNome": "Ato - Uploads",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1--ojwIkH0WFhD_nQMkWRjSGLrWGpW02Z&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1--ojwIkH0WFhD_nQMkWRjSGLrWGpW02Z&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1--ojwIkH0WFhD_nQMkWRjSGLrWGpW02Z",
+          "mimeType": "image/jpeg",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 1,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/1lHYmWu-lJD4tVr51-TIhyh9vcC8tV1Nw"
+        },
+        {
+          "driveFileId": "1aIGvlUmfVYblEPpXETgSt4d4IkpkjFe9",
+          "nome": "01_Capa.png",
+          "categoria": "Carrossel",
+          "loteNome": "Ato - 1 26-10 - 01 Carrossel",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1aIGvlUmfVYblEPpXETgSt4d4IkpkjFe9&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1aIGvlUmfVYblEPpXETgSt4d4IkpkjFe9&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1aIGvlUmfVYblEPpXETgSt4d4IkpkjFe9",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 1,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/14V1sUo0W2ZNAnombsufBH7Vl1OqCtdWF"
+        },
+        {
+          "driveFileId": "1ZY8h9zDoZeDxGgHD66CbjhQrrtpVSnvs",
+          "nome": "02_Interna.png",
+          "categoria": "Carrossel",
+          "loteNome": "Ato - 1 26-10 - 01 Carrossel",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1ZY8h9zDoZeDxGgHD66CbjhQrrtpVSnvs&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1ZY8h9zDoZeDxGgHD66CbjhQrrtpVSnvs&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1ZY8h9zDoZeDxGgHD66CbjhQrrtpVSnvs",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 2,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/14V1sUo0W2ZNAnombsufBH7Vl1OqCtdWF"
+        },
+        {
+          "driveFileId": "1lwb4N4oEXmjJzopmd63mUPl6pYGDhkJi",
+          "nome": "03_Interna.png",
+          "categoria": "Carrossel",
+          "loteNome": "Ato - 1 26-10 - 01 Carrossel",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1lwb4N4oEXmjJzopmd63mUPl6pYGDhkJi&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1lwb4N4oEXmjJzopmd63mUPl6pYGDhkJi&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1lwb4N4oEXmjJzopmd63mUPl6pYGDhkJi",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 3,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/14V1sUo0W2ZNAnombsufBH7Vl1OqCtdWF"
+        },
+        {
+          "driveFileId": "1uzlEX7T6TsJeA41rHr2dXvQvlUO-2aob",
+          "nome": "04_Fechamento.png",
+          "categoria": "Carrossel",
+          "loteNome": "Ato - 1 26-10 - 01 Carrossel",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1uzlEX7T6TsJeA41rHr2dXvQvlUO-2aob&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1uzlEX7T6TsJeA41rHr2dXvQvlUO-2aob&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1uzlEX7T6TsJeA41rHr2dXvQvlUO-2aob",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 4,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/14V1sUo0W2ZNAnombsufBH7Vl1OqCtdWF"
+        },
+        {
+          "driveFileId": "1vVw7RVOBTCfxsxKs8Geh-fdeGL_uF8DJ",
+          "nome": "01_Post.png",
+          "categoria": "Post Único",
+          "loteNome": "Ato - 1 26-10 - 02 Post unico",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1vVw7RVOBTCfxsxKs8Geh-fdeGL_uF8DJ&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1vVw7RVOBTCfxsxKs8Geh-fdeGL_uF8DJ&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1vVw7RVOBTCfxsxKs8Geh-fdeGL_uF8DJ",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 1,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/1NiuQ8uwS8UCzWlKY7WG0pe92bDDeJak_"
+        },
+        {
+          "driveFileId": "1NfXo2Zm2HoiwYFFxxwV3JYIy7B-wPor2",
+          "nome": "01_Story.png",
+          "categoria": "Story",
+          "loteNome": "Ato - 1 26-10 - 03 Story",
+          "viewUrl": "https://drive.google.com/thumbnail?id=1NfXo2Zm2HoiwYFFxxwV3JYIy7B-wPor2&sz=w1200",
+          "thumbnailUrl": "https://drive.google.com/thumbnail?id=1NfXo2Zm2HoiwYFFxxwV3JYIy7B-wPor2&sz=w1200",
+          "downloadUrl": "https://drive.google.com/uc?export=download&id=1NfXo2Zm2HoiwYFFxxwV3JYIy7B-wPor2",
+          "mimeType": "image/png",
+          "dataCriacao": "2026-10-26T17:18:58.656Z",
+          "status": "PENDENTE",
+          "ordem": 1,
+          "driveFolderName": "Ato",
+          "pastaClienteNome": "Ato",
+          "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "pastaUrl": "https://drive.google.com/drive/folders/1OghYLyXN21RmvFe_D4k1KlE3eGgt433e"
+        }
+      ],
+      "driveFolders": [
+        {
+          "id": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+          "nome": "Ato",
+          "url": "https://drive.google.com/drive/folders/1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF"
+        }
+      ],
+      "postGroupsMeta": {
+        "item_drive_test_item_rejection": {
+          "status": "REPROVADO",
+          "rejectionFeedback": {
+            "tags": [
+              "Posição da Logo",
+              "Cores Fortes/Erradas"
+            ],
+            "motivo": "Não gostei da posição da logo e as cores estão muito fortes",
+            "novoNomeArquivo": "posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png",
+            "dataReprovacao": "2026-10-26T17:54:38.053Z",
+            "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+            "driveFileId": "drive_test_item_rejection"
+          }
+        },
+        "item_1uV-Eb59I8fSchZBvqK9Q7xLqVR1zijGZ": {
+          "status": "PENDENTE"
+        },
+        "item_1XmXuBGiYrjUu5gfhX1ldT4jVUVG8gSgO": {
+          "status": "PENDENTE"
+        },
+        "item_1jz9z16VfkoVNrZxM7sf3YWGgBhSZe4-G": {
+          "status": "PENDENTE"
+        },
+        "carrossel_Ato_Ato - 2 23-10 - 01 Carrossel": {
+          "status": "PENDENTE"
+        },
+        "item_1ti66mGb0g1Bh6MJqbo51ibrRL14otOl6": {
+          "status": "PENDENTE"
+        },
+        "item_1PZ2G5_jiQDM8m5uiBXKkdwUUq63zi2LS": {
+          "status": "PENDENTE"
+        },
+        "carrossel_Ato_Ato - 3 23-10 - 01 Carrossel": {
+          "status": "PENDENTE"
+        },
+        "item_1KLxxTaa0hzZw9jDaOFeZXLg9lVtItS3K": {
+          "status": "PENDENTE"
+        },
+        "item_1ifw98-kJ0loOg6lkgWpvtxZg_48Ny1o0": {
+          "status": "PENDENTE"
+        },
+        "carrossel_Ato_Ato - 1 25-10 - 01 Carrossel": {
+          "status": "PENDENTE"
+        },
+        "item_1AieZ5z5XZSAgHnQi909JPEYdAyjeWbqb": {
+          "status": "PENDENTE"
+        },
+        "item_1sRb_Z4iuJXYhakNP9tTIGdxl3MKVd_pl": {
+          "status": "PENDENTE"
+        },
+        "item_1--ojwIkH0WFhD_nQMkWRjSGLrWGpW02Z": {
+          "status": "PENDENTE"
+        },
+        "carrossel_Ato_Ato - 1 26-10 - 01 Carrossel": {
+          "status": "PENDENTE"
+        },
+        "item_1vVw7RVOBTCfxsxKs8Geh-fdeGL_uF8DJ": {
+          "status": "PENDENTE"
+        },
+        "item_1NfXo2Zm2HoiwYFFxxwV3JYIy7B-wPor2": {
+          "status": "PENDENTE"
+        }
+      },
+      "adminAlerts": [],
+      "schedulerRuns": [
+        {
+          "runId": "worker_123_1793037291571",
+          "startedAt": "2026-10-26T17:54:51.571Z",
+          "finishedAt": "2026-10-26T17:54:51.571Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793037246570",
+          "startedAt": "2026-10-26T17:54:06.570Z",
+          "finishedAt": "2026-10-26T17:54:06.570Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793037201569",
+          "startedAt": "2026-10-26T17:53:21.569Z",
+          "finishedAt": "2026-10-26T17:53:21.570Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793037156578",
+          "startedAt": "2026-10-26T17:52:36.578Z",
+          "finishedAt": "2026-10-26T17:52:36.578Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793037111568",
+          "startedAt": "2026-10-26T17:51:51.568Z",
+          "finishedAt": "2026-10-26T17:51:51.568Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793037066567",
+          "startedAt": "2026-10-26T17:51:06.567Z",
+          "finishedAt": "2026-10-26T17:51:06.567Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793037021566",
+          "startedAt": "2026-10-26T17:50:21.566Z",
+          "finishedAt": "2026-10-26T17:50:21.566Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036976565",
+          "startedAt": "2026-10-26T17:49:36.565Z",
+          "finishedAt": "2026-10-26T17:49:36.565Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036931564",
+          "startedAt": "2026-10-26T17:48:51.564Z",
+          "finishedAt": "2026-10-26T17:48:51.564Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036886562",
+          "startedAt": "2026-10-26T17:48:06.562Z",
+          "finishedAt": "2026-10-26T17:48:06.562Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036841561",
+          "startedAt": "2026-10-26T17:47:21.561Z",
+          "finishedAt": "2026-10-26T17:47:21.561Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036796559",
+          "startedAt": "2026-10-26T17:46:36.559Z",
+          "finishedAt": "2026-10-26T17:46:36.559Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036751558",
+          "startedAt": "2026-10-26T17:45:51.558Z",
+          "finishedAt": "2026-10-26T17:45:51.558Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036706558",
+          "startedAt": "2026-10-26T17:45:06.558Z",
+          "finishedAt": "2026-10-26T17:45:06.558Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036661559",
+          "startedAt": "2026-10-26T17:44:21.559Z",
+          "finishedAt": "2026-10-26T17:44:21.559Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036616558",
+          "startedAt": "2026-10-26T17:43:36.558Z",
+          "finishedAt": "2026-10-26T17:43:36.558Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036571557",
+          "startedAt": "2026-10-26T17:42:51.557Z",
+          "finishedAt": "2026-10-26T17:42:51.557Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036526556",
+          "startedAt": "2026-10-26T17:42:06.556Z",
+          "finishedAt": "2026-10-26T17:42:06.556Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036481555",
+          "startedAt": "2026-10-26T17:41:21.555Z",
+          "finishedAt": "2026-10-26T17:41:21.555Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036436554",
+          "startedAt": "2026-10-26T17:40:36.554Z",
+          "finishedAt": "2026-10-26T17:40:36.554Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036391553",
+          "startedAt": "2026-10-26T17:39:51.553Z",
+          "finishedAt": "2026-10-26T17:39:51.553Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036346552",
+          "startedAt": "2026-10-26T17:39:06.552Z",
+          "finishedAt": "2026-10-26T17:39:06.552Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036301551",
+          "startedAt": "2026-10-26T17:38:21.551Z",
+          "finishedAt": "2026-10-26T17:38:21.551Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036256550",
+          "startedAt": "2026-10-26T17:37:36.550Z",
+          "finishedAt": "2026-10-26T17:37:36.550Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036211550",
+          "startedAt": "2026-10-26T17:36:51.550Z",
+          "finishedAt": "2026-10-26T17:36:51.550Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036166549",
+          "startedAt": "2026-10-26T17:36:06.549Z",
+          "finishedAt": "2026-10-26T17:36:06.549Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036121548",
+          "startedAt": "2026-10-26T17:35:21.548Z",
+          "finishedAt": "2026-10-26T17:35:21.548Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036076548",
+          "startedAt": "2026-10-26T17:34:36.548Z",
+          "finishedAt": "2026-10-26T17:34:36.548Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793036031548",
+          "startedAt": "2026-10-26T17:33:51.548Z",
+          "finishedAt": "2026-10-26T17:33:51.548Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035986548",
+          "startedAt": "2026-10-26T17:33:06.548Z",
+          "finishedAt": "2026-10-26T17:33:06.548Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035941548",
+          "startedAt": "2026-10-26T17:32:21.548Z",
+          "finishedAt": "2026-10-26T17:32:21.548Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035896548",
+          "startedAt": "2026-10-26T17:31:36.548Z",
+          "finishedAt": "2026-10-26T17:31:36.548Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035851546",
+          "startedAt": "2026-10-26T17:30:51.546Z",
+          "finishedAt": "2026-10-26T17:30:51.546Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035806546",
+          "startedAt": "2026-10-26T17:30:06.546Z",
+          "finishedAt": "2026-10-26T17:30:06.546Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035761546",
+          "startedAt": "2026-10-26T17:29:21.546Z",
+          "finishedAt": "2026-10-26T17:29:21.546Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035716546",
+          "startedAt": "2026-10-26T17:28:36.546Z",
+          "finishedAt": "2026-10-26T17:28:36.546Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035671546",
+          "startedAt": "2026-10-26T17:27:51.546Z",
+          "finishedAt": "2026-10-26T17:27:51.546Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035626544",
+          "startedAt": "2026-10-26T17:27:06.544Z",
+          "finishedAt": "2026-10-26T17:27:06.544Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035581543",
+          "startedAt": "2026-10-26T17:26:21.543Z",
+          "finishedAt": "2026-10-26T17:26:21.543Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035536542",
+          "startedAt": "2026-10-26T17:25:36.542Z",
+          "finishedAt": "2026-10-26T17:25:36.542Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035491541",
+          "startedAt": "2026-10-26T17:24:51.541Z",
+          "finishedAt": "2026-10-26T17:24:51.541Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035446539",
+          "startedAt": "2026-10-26T17:24:06.539Z",
+          "finishedAt": "2026-10-26T17:24:06.540Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035401538",
+          "startedAt": "2026-10-26T17:23:21.538Z",
+          "finishedAt": "2026-10-26T17:23:21.538Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035356537",
+          "startedAt": "2026-10-26T17:22:36.537Z",
+          "finishedAt": "2026-10-26T17:22:36.537Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035311536",
+          "startedAt": "2026-10-26T17:21:51.536Z",
+          "finishedAt": "2026-10-26T17:21:51.536Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035266536",
+          "startedAt": "2026-10-26T17:21:06.536Z",
+          "finishedAt": "2026-10-26T17:21:06.536Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035221535",
+          "startedAt": "2026-10-26T17:20:21.535Z",
+          "finishedAt": "2026-10-26T17:20:21.535Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035176534",
+          "startedAt": "2026-10-26T17:19:36.534Z",
+          "finishedAt": "2026-10-26T17:19:36.534Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035131533",
+          "startedAt": "2026-10-26T17:18:51.533Z",
+          "finishedAt": "2026-10-26T17:18:51.533Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035086532",
+          "startedAt": "2026-10-26T17:18:06.532Z",
+          "finishedAt": "2026-10-26T17:18:06.532Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793035041531",
+          "startedAt": "2026-10-26T17:17:21.531Z",
+          "finishedAt": "2026-10-26T17:17:21.531Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034996529",
+          "startedAt": "2026-10-26T17:16:36.529Z",
+          "finishedAt": "2026-10-26T17:16:36.529Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034951528",
+          "startedAt": "2026-10-26T17:15:51.528Z",
+          "finishedAt": "2026-10-26T17:15:51.528Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034906527",
+          "startedAt": "2026-10-26T17:15:06.527Z",
+          "finishedAt": "2026-10-26T17:15:06.527Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034861527",
+          "startedAt": "2026-10-26T17:14:21.527Z",
+          "finishedAt": "2026-10-26T17:14:21.527Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034816525",
+          "startedAt": "2026-10-26T17:13:36.525Z",
+          "finishedAt": "2026-10-26T17:13:36.525Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034771525",
+          "startedAt": "2026-10-26T17:12:51.525Z",
+          "finishedAt": "2026-10-26T17:12:51.525Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034726524",
+          "startedAt": "2026-10-26T17:12:06.524Z",
+          "finishedAt": "2026-10-26T17:12:06.524Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034681524",
+          "startedAt": "2026-10-26T17:11:21.524Z",
+          "finishedAt": "2026-10-26T17:11:21.524Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034636523",
+          "startedAt": "2026-10-26T17:10:36.523Z",
+          "finishedAt": "2026-10-26T17:10:36.523Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034591522",
+          "startedAt": "2026-10-26T17:09:51.522Z",
+          "finishedAt": "2026-10-26T17:09:51.522Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034546522",
+          "startedAt": "2026-10-26T17:09:06.522Z",
+          "finishedAt": "2026-10-26T17:09:06.522Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034501521",
+          "startedAt": "2026-10-26T17:08:21.521Z",
+          "finishedAt": "2026-10-26T17:08:21.521Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034456520",
+          "startedAt": "2026-10-26T17:07:36.520Z",
+          "finishedAt": "2026-10-26T17:07:36.520Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034411520",
+          "startedAt": "2026-10-26T17:06:51.520Z",
+          "finishedAt": "2026-10-26T17:06:51.520Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034366519",
+          "startedAt": "2026-10-26T17:06:06.519Z",
+          "finishedAt": "2026-10-26T17:06:06.519Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034321517",
+          "startedAt": "2026-10-26T17:05:21.517Z",
+          "finishedAt": "2026-10-26T17:05:21.518Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034276517",
+          "startedAt": "2026-10-26T17:04:36.517Z",
+          "finishedAt": "2026-10-26T17:04:36.517Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034231516",
+          "startedAt": "2026-10-26T17:03:51.516Z",
+          "finishedAt": "2026-10-26T17:03:51.516Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034186516",
+          "startedAt": "2026-10-26T17:03:06.516Z",
+          "finishedAt": "2026-10-26T17:03:06.516Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034141515",
+          "startedAt": "2026-10-26T17:02:21.515Z",
+          "finishedAt": "2026-10-26T17:02:21.515Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034096514",
+          "startedAt": "2026-10-26T17:01:36.514Z",
+          "finishedAt": "2026-10-26T17:01:36.514Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034051514",
+          "startedAt": "2026-10-26T17:00:51.514Z",
+          "finishedAt": "2026-10-26T17:00:51.514Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793034006513",
+          "startedAt": "2026-10-26T17:00:06.513Z",
+          "finishedAt": "2026-10-26T17:00:06.513Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793033961512",
+          "startedAt": "2026-10-26T16:59:21.512Z",
+          "finishedAt": "2026-10-26T16:59:21.512Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793033916511",
+          "startedAt": "2026-10-26T16:58:36.511Z",
+          "finishedAt": "2026-10-26T16:58:36.511Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793033871510",
+          "startedAt": "2026-10-26T16:57:51.510Z",
+          "finishedAt": "2026-10-26T16:57:51.511Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        },
+        {
+          "runId": "worker_123_1793033826511",
+          "startedAt": "2026-10-26T16:57:06.511Z",
+          "finishedAt": "2026-10-26T16:57:06.511Z",
+          "processedCount": 0,
+          "publishedCount": 0,
+          "failedCount": 0,
+          "skippedCount": 0
+        }
+      ]
+    },
+    "last_webhook_payload.json": {
+      "receivedAt": "2026-10-27T02:06:09.196Z",
+      "body": {
+        "evento": "NOVAS_ARTES_SOCIAL_MEDIA",
+        "timestamp": "2026-10-27T02:06:08.510Z",
+        "lotes": [
+          {
+            "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+            "pastaClienteNome": "Ato",
+            "loteNome": "Ato - 1 24-10 - 01 Post unico",
+            "categoria": "01 Post unico",
+            "pastaUrl": "https://drive.google.com/drive/folders/1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+            "arquivos": [
+              {
+                "driveFileId": "drive_test_item_rejection",
+                "nome": "01_Post.png",
+                "mimeType": "image/png",
+                "viewUrl": "data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"100\"><rect fill=\"black\"/></svg>",
+                "thumbnailUrl": "data:image/svg+xml;utf8,<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100\" height=\"100\"><rect fill=\"black\"/></svg>",
+                "downloadUrl": "https://drive.google.com/uc?export=download&id=drive_test_item_rejection"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "_MEMORIA_REPROVACOES.md": "- [2026-10-24T04:58:39.718Z] Arquivo: **ATO_Post_Unico_Test.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__ato_post_unico_test.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: ATO Social Midia\n- [2026-10-24T04:59:02.081Z] Arquivo: **ATO_Post_Unico_Test.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__ato_post_unico_test.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: ATO Social Midia\n- [2026-10-24T05:14:45.259Z] Arquivo: **ATO_Post_Unico_Test.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__ato_post_unico_test.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: ATO Social Midia\n- [2026-10-24T05:15:11.319Z] Arquivo: **ATO_Post_Unico_Test.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__ato_post_unico_test.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: ATO Social Midia\n- [2026-10-24T06:13:30.868Z] Arquivo: **ATO_Post_Unico_Test.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__ato_post_unico_test.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: ATO Social Midia\n- [2026-10-24T22:17:17.912Z] Arquivo: **ATO_Post_Unico_Test.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__ato_post_unico_test.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: ATO Social Midia\n- [2026-10-24T22:19:21.897Z] Arquivo: **ATO_Post_Unico_Test.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__ato_post_unico_test.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: ATO Social Midia\n- [2026-10-24T23:29:25.818Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-24T23:38:23.679Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-25T05:58:14.985Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-25T06:08:41.541Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-25T06:46:47.801Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-25T16:10:24.194Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-25T16:24:00.570Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-25T22:03:00.996Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-25T22:33:55.255Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-25T22:54:05.241Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-25T22:59:25.498Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-25T23:45:29.488Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-26T01:06:32.886Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-26T01:08:15.049Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-26T01:37:16.170Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-26T01:53:17.542Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-26T02:31:18.906Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-26T03:09:34.860Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-26T03:47:33.152Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-26T04:53:07.376Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-26T04:59:35.269Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-26T05:14:08.627Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-26T05:21:45.634Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n- [2026-10-26T17:54:38.053Z] Arquivo: **01_Post.png** -> Novo Nome: **posicao_da_logo_cores_fortes_erradas_nao_gostei_da_posicao_da_logo_e_as_cores_estao_mui__01_post.png** | Motivo: \"Não gostei da posição da logo e as cores estão muito fortes\" | Tags: [\"Posição da Logo\",\"Cores Fortes/Erradas\"] | Pasta: Ato\n"
+  }
+}
