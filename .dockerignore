@@ -1,0 +1,20 @@
+# Não enviar para o Railway: dados locais, segredos e artefatos da máquina de desenvolvimento.
+# (O Railway deve usar o DATABASE_URL do próprio serviço Postgres, nunca o .data local.)
+
+# Dados locais (PGlite, backups, cache de miniaturas, payloads de teste)
+.data/
+
+# Segredos locais (o Railway usa as variáveis de ambiente do painel)
+.env
+.env.*
+!.env.example
+
+# Dependências e artefatos locais (o Railway reinstala e gera o build)
+node_modules/
+dist/
+*.log
+
+# Controle de versão e editor
+.git/
+.vscode/
+.idea/
