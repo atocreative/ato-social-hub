@@ -157,7 +157,7 @@ describe('ATO Social Hub — Auditoria de Segurança OAuth Instagram & Isolament
         code: 'valid_admin_code',
         clientId: '1638364467693255',
         clientSecret: 'secret_test',
-        redirectUri: 'https://ato-social-hub.ai.studio/api/auth/instagram/callback',
+        redirectUri: 'https://socialhub.atodev.com.br/api/auth/instagram/callback',
       });
 
       expect(result.ok).toBe(true);
@@ -209,7 +209,7 @@ describe('ATO Social Hub — Auditoria de Segurança OAuth Instagram & Isolament
         code: 'valid_tester_code',
         clientId: '1638364467693255',
         clientSecret: 'secret_test',
-        redirectUri: 'https://ato-social-hub.ai.studio/api/auth/instagram/callback',
+        redirectUri: 'https://socialhub.atodev.com.br/api/auth/instagram/callback',
       });
 
       expect(result.ok).toBe(true);
@@ -260,7 +260,7 @@ describe('ATO Social Hub — Auditoria de Segurança OAuth Instagram & Isolament
         code: 'external_unauth_code',
         clientId: '1638364467693255',
         clientSecret: 'secret_test',
-        redirectUri: 'https://ato-social-hub.ai.studio/api/auth/instagram/callback',
+        redirectUri: 'https://socialhub.atodev.com.br/api/auth/instagram/callback',
       });
 
       expect(result.ok).toBe(false);
@@ -311,7 +311,7 @@ describe('ATO Social Hub — Auditoria de Segurança OAuth Instagram & Isolament
         code: 'personal_account_code',
         clientId: '1638364467693255',
         clientSecret: 'secret_test',
-        redirectUri: 'https://ato-social-hub.ai.studio/api/auth/instagram/callback',
+        redirectUri: 'https://socialhub.atodev.com.br/api/auth/instagram/callback',
       });
 
       expect(result.ok).toBe(false);
@@ -428,7 +428,7 @@ describe('ATO Social Hub — Auditoria de Segurança OAuth Instagram & Isolament
         code: `code_for_${uniqueSuffix}`,
         clientId: '1638364467693255',
         clientSecret: 'secret_test',
-        redirectUri: 'https://ato-social-hub.ai.studio/api/auth/instagram/callback',
+        redirectUri: 'https://socialhub.atodev.com.br/api/auth/instagram/callback',
         preferredTenantId: regData.tenant.id,
         driveFolderName: folderName,
       });
@@ -500,7 +500,7 @@ describe('ATO Social Hub — Auditoria de Segurança OAuth Instagram & Isolament
         code: 'code_cross_tenant_attempt',
         clientId: '1638364467693255',
         clientSecret: 'secret_test',
-        redirectUri: 'https://ato-social-hub.ai.studio/api/auth/instagram/callback',
+        redirectUri: 'https://socialhub.atodev.com.br/api/auth/instagram/callback',
         driveFolderName: 'Empresa_Intrusa_Diferente_De_Ato',
       });
 

@@ -1,0 +1,1 @@
+SCHEDULER_MODE=disabled DATABASE_URL="postgresql://postgres:FlFFdcqWmPMpYqvVSalxfjubIVuGWIPY@postgres-652b0b40.railway.internal:5432/railway" npm run dev

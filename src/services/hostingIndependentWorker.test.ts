@@ -161,7 +161,7 @@ describe('ATO Social Hub — Agendamento Independente de Hospedagem & Tokens no 
       code: 'valid_oauth_code_from_meta',
       clientId: '1638364467693255',
       clientSecret: 'real_test_secret_1234567890',
-      redirectUri: 'https://ato-social-hub.ai.studio/api/auth/instagram/callback',
+      redirectUri: 'https://socialhub.atodev.com.br/api/auth/instagram/callback',
       preferredTenantId: TEST_ACCOUNT_ID,
     });
 

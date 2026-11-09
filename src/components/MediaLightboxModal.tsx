@@ -7,7 +7,9 @@ import {
   MediaAspectRatio,
 } from '../utils/postHelpers.ts';
 import { X, ChevronLeft, ChevronRight, Layers, Check, XCircle } from 'lucide-react';
-import { driveThumbUrl } from '../utils/mediaUrl.ts';
+import { getMediaKind, getDrivePreviewUrl } from '../utils/mediaKind.ts';
+import { MediaDownloadButton } from './MediaDownloadButton.tsx';
+import { MediaImage } from './MediaImage.tsx';
 
 interface MediaLightboxModalProps {
   post: PostGroup;
@@ -129,6 +131,10 @@ export const MediaLightboxModal: React.FC<MediaLightboxModalProps> = ({
             </h3>
           </div>
 
+          <div className="flex items-center gap-2 shrink-0">
+            <MediaDownloadButton item={currentItem} />
+          </div>
+
           <button
             type="button"
             onClick={onClose}
@@ -141,11 +147,30 @@ export const MediaLightboxModal: React.FC<MediaLightboxModalProps> = ({
 
         {/* Full-size Artwork Viewport */}
         <div className="relative flex-1 bg-[#080808] flex items-center justify-center p-4 md:p-6 overflow-auto min-h-[320px]">
-          {currentItem ? (
-            <img
-              src={driveThumbUrl(currentItem.driveFileId, 1600) || currentItem.viewUrl || currentItem.thumbnailUrl}
+          {currentItem && getMediaKind(currentItem, post.categoria) === 'video' ? (
+            getDrivePreviewUrl(currentItem.driveFileId) ? (
+              <iframe
+                src={getDrivePreviewUrl(currentItem.driveFileId)}
+                title={currentItem.nome || post.nome}
+                allow="autoplay; fullscreen"
+                allowFullScreen
+                className="w-full max-w-4xl aspect-video rounded-lg border border-[#1E1E1E] bg-black"
+              />
+            ) : (
+              <video
+                src={currentItem.viewUrl}
+                controls
+                playsInline
+                className="max-h-[68vh] w-auto max-w-full rounded-lg border border-[#1E1E1E] bg-black"
+              />
+            )
+          ) : currentItem ? (
+            <MediaImage
+              key={`${currentIndex}-${currentItem.driveFileId || currentItem.viewUrl || ''}`}
+              item={currentItem}
+              width={1600}
               alt={currentItem.nome || post.nome}
-              referrerPolicy="no-referrer"
+              placeholderClassName="w-[min(90vw,420px)] aspect-square"
               onLoad={(e) => {
                 const { naturalWidth, naturalHeight } = e.currentTarget;
                 if (naturalWidth > 0 && naturalHeight > 0) {
@@ -158,18 +183,6 @@ export const MediaLightboxModal: React.FC<MediaLightboxModalProps> = ({
                       ratio: detected,
                     },
                   }));
-                }
-              }}
-              onError={(e) => {
-                const target = e.currentTarget;
-                const thumbFallback =
-                  currentItem.thumbnailUrl && target.src !== currentItem.thumbnailUrl
-                    ? currentItem.thumbnailUrl
-                    : currentItem.driveFileId
-                    ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(currentItem.driveFileId)}&sz=w1600`
-                    : '';
-                if (thumbFallback && target.src !== thumbFallback) {
-                  target.src = thumbFallback;
                 }
               }}
               className="max-h-[68vh] w-auto max-w-full object-contain rounded-lg border border-[#1E1E1E]"

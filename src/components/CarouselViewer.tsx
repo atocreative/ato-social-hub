@@ -5,8 +5,11 @@ import {
   detectAspectRatioFromDimensions,
   MediaAspectRatio,
 } from '../utils/postHelpers.ts';
-import { ChevronLeft, ChevronRight, Maximize2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, Maximize2 } from 'lucide-react';
 import { driveThumbUrl } from '../utils/mediaUrl.ts';
+import { MediaDownloadButton } from './MediaDownloadButton.tsx';
+import { MediaImage } from './MediaImage.tsx';
+import { getOriginalDownloadUrl, getDownloadFileName } from '../utils/mediaKind.ts';
 
 interface CarouselViewerProps {
   items: DriveImageItem[];
@@ -34,6 +37,31 @@ export const CarouselViewer: React.FC<CarouselViewerProps> = ({
   const [slideDimensions, setSlideDimensions] = useState<
     Record<number, { width: number; height: number; ratio: MediaAspectRatio }>
   >({});
+  const [downloadProgress, setDownloadProgress] = useState<{ done: number; total: number } | null>(null);
+
+  // Dispara o download de cada slide em sequência (um clique por arquivo, com pausa entre eles
+  // para o navegador não bloquear os downloads extras).
+  const handleDownloadAll = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (downloadProgress || !items?.length) return;
+    const targets = items
+      .map((item) => ({ href: getOriginalDownloadUrl(item), name: getDownloadFileName(item) }))
+      .filter((t) => t.href);
+    for (let i = 0; i < targets.length; i++) {
+      setDownloadProgress({ done: i, total: targets.length });
+      const a = document.createElement('a');
+      a.href = targets[i].href;
+      a.download = targets[i].name;
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      if (i < targets.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+    }
+    setDownloadProgress(null);
+  };
 
   const setIndex = (nextIndex: number) => {
     if (onIndexChange) {
@@ -102,12 +130,11 @@ export const CarouselViewer: React.FC<CarouselViewerProps> = ({
           onExpand ? 'cursor-zoom-in' : ''
         }`}
       >
-        <img
-          src={driveThumbUrl(currentItem.driveFileId, 800) || currentItem.viewUrl || currentItem.thumbnailUrl}
+        <MediaImage
+          key={`${currentIndex}-${currentItem.driveFileId || currentItem.viewUrl || ''}`}
+          item={currentItem}
+          width={800}
           alt={`Slide ${currentIndex + 1}: ${currentItem.nome}`}
-          loading="lazy"
-          decoding="async"
-          referrerPolicy="no-referrer"
           onLoad={(e) => {
             const { naturalWidth, naturalHeight } = e.currentTarget;
             if (naturalWidth > 0 && naturalHeight > 0) {
@@ -123,20 +150,13 @@ export const CarouselViewer: React.FC<CarouselViewerProps> = ({
               onRatioDetected?.(detected);
             }
           }}
-          onError={(e) => {
-            const target = e.currentTarget;
-            const thumbFallback =
-              currentItem.thumbnailUrl && target.src !== currentItem.thumbnailUrl
-                ? currentItem.thumbnailUrl
-                : currentItem.driveFileId
-                ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(currentItem.driveFileId)}&sz=w1200`
-                : '';
-            if (thumbFallback && target.src !== thumbFallback) {
-              target.src = thumbFallback;
-            }
-          }}
           className="w-full h-full object-cover transition-opacity duration-200"
         />
+
+        {/* Download do slide atual em qualidade original (só este slide, não o carrossel inteiro) */}
+        <div className="absolute bottom-2.5 left-2.5 z-10">
+          <MediaDownloadButton item={currentItem} compact />
+        </div>
 
         {/* Top Bar: Exact Aspect Ratio Badge (1:1, 4:5, or 9:16) + Slide Name + Discrete Expand Button */}
         <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2 pointer-events-none">
@@ -221,6 +241,23 @@ export const CarouselViewer: React.FC<CarouselViewerProps> = ({
           <ChevronRight className="w-3.5 h-3.5 text-[#10B981]" />
         </button>
       </div>
+
+      {/* Baixar todos os slides do carrossel em qualidade original */}
+      <button
+        type="button"
+        onClick={handleDownloadAll}
+        disabled={downloadProgress !== null}
+        aria-label={`Baixar todas as ${items.length} imagens do carrossel`}
+        title="Baixar todas as imagens do carrossel em qualidade original"
+        className="mt-2 w-full px-3 py-1.5 bg-[#1A1A1A] hover:bg-[#10B981]/15 border border-[#2E2E2E] hover:border-[#10B981] hover:text-[#10B981] disabled:opacity-60 disabled:cursor-wait rounded-lg text-xs text-white font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+      >
+        <Download className="w-3.5 h-3.5" />
+        <span>
+          {downloadProgress
+            ? `Baixando ${Math.min(downloadProgress.done + 1, downloadProgress.total)}/${downloadProgress.total}...`
+            : `Baixar todas (${items.length})`}
+        </span>
+      </button>
     </div>
   );
 };

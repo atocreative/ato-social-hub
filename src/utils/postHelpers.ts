@@ -1,4 +1,5 @@
 import { DriveImageItem, PostCategory, PostGroup } from '../types/index.ts';
+import { getMediaKind } from './mediaKind.ts';
 
 /**
  * Normalizes category strings from Google Drive / Apps Script (e.g. "01 Post unico", "02 Carrossel", "03 Story")
@@ -14,6 +15,9 @@ export function normalizeCategoria(raw?: string, filesCount: number = 1): PostCa
     .toLowerCase()
     .trim();
 
+  if (normalized.includes('video')) {
+    return 'V\u00eddeos';
+  }
   if (normalized.includes('carrossel') || normalized.includes('carrosel')) {
     return 'Carrossel';
   }
@@ -236,7 +240,8 @@ export function generateRejectedFilename(
   return `reprovado__${originalSlug || 'arte'}${ext}`;
 }
 
-export type CategoryFilter = 'TODOS' | 'Post Único' | 'Carrossel' | 'Story';
+export type CategoryFilter = 'TODOS' | 'Post Único' | 'Carrossel' | 'Story' | 'Vídeos';
+export type MediaFilter = 'TODOS' | 'IMAGENS' | 'VIDEOS';
 export type MediaAspectRatio = '1:1' | '4:5' | '9:16' | '16:9';
 
 /**
@@ -318,7 +323,8 @@ export function filterPosts(
   tab: 'TODOS' | 'PENDENTES' | 'AGENDADOS' | 'PUBLICADOS' | 'REPROVADOS',
   searchQuery: string = '',
   companyFilter?: string,
-  categoryFilter: CategoryFilter = 'TODOS'
+  categoryFilter: CategoryFilter = 'TODOS',
+  mediaFilter: MediaFilter = 'TODOS'
 ): PostGroup[] {
   if (!Array.isArray(posts)) {
     return [];
@@ -370,6 +376,14 @@ export function filterPosts(
       if (normalizedPostCat !== categoryFilter) {
         return false;
       }
+    }
+
+    if (mediaFilter !== 'TODOS') {
+      const kinds = (post.items || []).map((item) => getMediaKind(item, post.categoria));
+      const temVideo = kinds.includes('video');
+      const temImagem = kinds.includes('image') || kinds.length === 0;
+      if (mediaFilter === 'VIDEOS' && !temVideo) return false;
+      if (mediaFilter === 'IMAGENS' && !temImagem) return false;
     }
 
     if (query) {

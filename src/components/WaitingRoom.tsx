@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { UserProfile } from '../types/index.ts';
 import { api, authStorage } from '../services/api.ts';
 import { Clock } from 'lucide-react';
+import { BrandLogo } from './BrandLogo.tsx';
 
 interface WaitingRoomProps {
   user: UserProfile;
@@ -81,9 +82,7 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
       <div className="w-full max-w-[420px]">
         {/* Brand Header */}
         <div className="flex flex-col items-center mb-8">
-          <span className="text-2xl font-bold tracking-tight text-white font-mono">
-            ATO<span className="text-[#10B981]">.</span>
-          </span>
+          <BrandLogo variant="dot" height={44} />
         </div>
 
         {/* Card */}

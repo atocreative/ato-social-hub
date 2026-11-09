@@ -100,7 +100,7 @@ describe('ATO Social Hub — SaaS Multiusuário, Multiempresa e Ciclo Automátic
       code: 'oauth_code_ato_vc_saas_1',
       clientId: '954242347109139',
       clientSecret: 'test_secret_ato',
-      redirectUri: 'https://ato-social-hub.ai.studio/api/auth/instagram/callback',
+      redirectUri: 'https://socialhub.atodev.com.br/api/auth/instagram/callback',
       preferredTenantId: 'tenant_ato_vc',
       driveFolderName: 'Ato',
     });

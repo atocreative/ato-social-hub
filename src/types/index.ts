@@ -1,4 +1,4 @@
-export type PostCategory = 'Post Único' | 'Carrossel' | 'Story';
+export type PostCategory = 'Post Único' | 'Carrossel' | 'Story' | 'Vídeos';
 
 export type PostStatus =
   | 'CRIADO'
@@ -225,7 +225,7 @@ export interface TenantAccount {
   approvedAt?: string;
   // Encrypted token & lifecycle metadata
   encryptedAccessToken?: string;
-  tokenType?: 'LONG_LIVED' | 'SHORT_LIVED';
+  tokenType?: string;
   tokenIssuedAt?: string;
   tokenExpiresAt?: string;
   lastTokenRefreshAt?: string;

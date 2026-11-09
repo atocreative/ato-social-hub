@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="0 0 800 280" width="260" height="91" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><defs><style>
+    @import url('https://fonts.googleapis.com/css2?family=Archivo+Black&amp;family=Space+Grotesk:wght@500&amp;display=swap');
+    text { font-family: 'Archivo Black', 'Space Grotesk', sans-serif; }
+  </style></defs><g transform="translate(40 20)"><g fill="none" stroke="#FFFFFF" stroke-width="22" stroke-linecap="round"><path d="M 42 78 A 58 58 0 1 1 158 78"/><line x1="52" y1="132" x2="148" y2="132"/><line x1="52" y1="132" x2="28" y2="210"/><line x1="148" y1="132" x2="172" y2="210"/></g></g><g><text x="310" y="180" text-anchor="start" font-family="'Archivo Black', sans-serif" font-weight="900" font-size="150" fill="#FFFFFF" letter-spacing="-6.75" style="font-feature-settings: &quot;kern&quot;;">ATO</text><rect x="623.1991821289063" y="153" width="27" height="27" fill="#FFFFFF"/></g></svg>

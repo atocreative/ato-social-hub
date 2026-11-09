@@ -1125,6 +1125,9 @@ export async function upsertPostGroupToDb(
         pasta_cliente_id = COALESCE(EXCLUDED.pasta_cliente_id, media_assets.pasta_cliente_id),
         pasta_url = COALESCE(EXCLUDED.pasta_url, media_assets.pasta_url),
         rejection_feedback = COALESCE(EXCLUDED.rejection_feedback, media_assets.rejection_feedback),
+        -- Veio do Drive agora, então o arquivo existe: remove qualquer marca de indisponível anterior.
+        indisponivel = FALSE,
+        indisponivel_em = NULL,
         updated_at = NOW()
       `,
       [
@@ -2184,6 +2187,24 @@ export async function getHiddenPostIdsForUserFromDb(userId: string): Promise<str
 
 export async function unhideMediaForAllUsersInDb(postId: string): Promise<void> {
   await dbQuery(`DELETE FROM user_hidden_media WHERE post_id = $1`, [postId]);
+}
+
+/** Marca a mídia como indisponível (arquivo inexistente no Drive). Ela deixa de aparecer nas listagens. */
+export async function markMediaUnavailableInDb(driveFileId: string): Promise<void> {
+  await dbQuery(
+    `UPDATE media_assets
+     SET indisponivel = TRUE, indisponivel_em = COALESCE(indisponivel_em, NOW()), updated_at = NOW()
+     WHERE drive_file_id = $1 AND indisponivel = FALSE`,
+    [driveFileId]
+  );
+}
+
+/** Lista os ids das mídias marcadas como indisponíveis (usado para filtrar a resposta em memória). */
+export async function listUnavailableMediaIdsFromDb(): Promise<string[]> {
+  const res = await dbQuery<{ drive_file_id: string }>(
+    `SELECT drive_file_id FROM media_assets WHERE indisponivel = TRUE`
+  );
+  return res.rows.map((r) => r.drive_file_id);
 }
 
 export async function getAllHiddenPostsMapFromDb(): Promise<Map<string, { userId: string; hiddenAt: string }>> {

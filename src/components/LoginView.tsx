@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api, authStorage } from '../services/api.ts';
 import { AuthResponse } from '../types/index.ts';
+import { BrandLogo } from './BrandLogo.tsx';
 
 interface LoginViewProps {
   onLoginSuccess: (user: AuthResponse['user']) => void;
@@ -196,9 +197,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigate
         {/* Brand Logo Header */}
         <div className="flex flex-col items-center mb-8">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-2xl font-bold tracking-tight text-white font-mono">
-              ATO<span className="text-[#10B981]">.</span>
-            </span>
+            <BrandLogo variant="dot" height={44} />
           </div>
           <span className="text-xs text-[#8E8E93]">Portal de Mídias & Aprovação</span>
         </div>

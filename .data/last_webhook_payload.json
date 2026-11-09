@@ -1,8 +1,8 @@
 {
-  "receivedAt": "2026-10-30T16:12:10.486Z",
+  "receivedAt": "2026-11-09T19:43:03.551Z",
   "body": {
     "evento": "NOVAS_ARTES_SOCIAL_MEDIA",
-    "timestamp": "2026-10-30T16:12:10.470Z",
+    "timestamp": "2026-11-09T19:43:03.538Z",
     "pastas": [
       {
         "id": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
@@ -11,6 +11,535 @@
       }
     ],
     "lotes": [
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 01-11 - 01 Post unico",
+        "categoria": "01 Post unico",
+        "pastaUrl": "https://drive.google.com/drive/folders/1CO4YnE3cxB3hpdtG2jX-XdjfcQ8dHjy_",
+        "arquivos": [
+          {
+            "driveFileId": "1dlcnAC0QiaXAlmCsT56XsPtW4fS1OlMG",
+            "nome": "01_Post.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1dlcnAC0QiaXAlmCsT56XsPtW4fS1OlMG&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1dlcnAC0QiaXAlmCsT56XsPtW4fS1OlMG&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1dlcnAC0QiaXAlmCsT56XsPtW4fS1OlMG"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 01-11 - 02 Post unico",
+        "categoria": "02 Post unico",
+        "pastaUrl": "https://drive.google.com/drive/folders/1_4Jb9mmKA4OD_-VMhVbeo0mVZAYYIPw-",
+        "arquivos": [
+          {
+            "driveFileId": "1bmG9g4eQOpQMYrfHsrAmIxnW0HB2TxQ1",
+            "nome": "01_Post.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1bmG9g4eQOpQMYrfHsrAmIxnW0HB2TxQ1&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1bmG9g4eQOpQMYrfHsrAmIxnW0HB2TxQ1&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1bmG9g4eQOpQMYrfHsrAmIxnW0HB2TxQ1"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 01-11 - 03 Post unico",
+        "categoria": "03 Post unico",
+        "pastaUrl": "https://drive.google.com/drive/folders/1sjyYBN4X6BNdzr03ki-Oqv8r6qskGBjz",
+        "arquivos": [
+          {
+            "driveFileId": "1_Oq0zOeK4MgWaalisoQhooJVoKVBaEMt",
+            "nome": "01_Post.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1_Oq0zOeK4MgWaalisoQhooJVoKVBaEMt&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1_Oq0zOeK4MgWaalisoQhooJVoKVBaEMt&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1_Oq0zOeK4MgWaalisoQhooJVoKVBaEMt"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 02-11 - 01 Carrossel",
+        "categoria": "01 Carrossel",
+        "pastaUrl": "https://drive.google.com/drive/folders/1ne8jxUe5-EjpDosCh8XWYSU2i4slR4eE",
+        "arquivos": [
+          {
+            "driveFileId": "1f_GG8xdP4gqQijspR8YQUsvq7BgUW3lG",
+            "nome": "01_Capa.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1f_GG8xdP4gqQijspR8YQUsvq7BgUW3lG&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1f_GG8xdP4gqQijspR8YQUsvq7BgUW3lG&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1f_GG8xdP4gqQijspR8YQUsvq7BgUW3lG"
+          },
+          {
+            "driveFileId": "1rQymwQ8NCuxPe5xOaoW67pIqAYnVFOfN",
+            "nome": "02_Interna.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1rQymwQ8NCuxPe5xOaoW67pIqAYnVFOfN&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1rQymwQ8NCuxPe5xOaoW67pIqAYnVFOfN&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1rQymwQ8NCuxPe5xOaoW67pIqAYnVFOfN"
+          },
+          {
+            "driveFileId": "1C3zaUyh5a4AVxBK5u5KtRCyHmIbUAGnP",
+            "nome": "03_Interna.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1C3zaUyh5a4AVxBK5u5KtRCyHmIbUAGnP&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1C3zaUyh5a4AVxBK5u5KtRCyHmIbUAGnP&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1C3zaUyh5a4AVxBK5u5KtRCyHmIbUAGnP"
+          },
+          {
+            "driveFileId": "1OafhXSy44r-DxGFVofZK1LVwPlQfDqPc",
+            "nome": "04_Fechamento.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1OafhXSy44r-DxGFVofZK1LVwPlQfDqPc&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1OafhXSy44r-DxGFVofZK1LVwPlQfDqPc&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1OafhXSy44r-DxGFVofZK1LVwPlQfDqPc"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 02-11 - 02 Post unico",
+        "categoria": "02 Post unico",
+        "pastaUrl": "https://drive.google.com/drive/folders/1hMI7reB1O3eRbr_ZNrPvGRQD2wieP4NI",
+        "arquivos": [
+          {
+            "driveFileId": "13HYkQMUySNdTnRJxaIrDVMPieNkPHCGa",
+            "nome": "01_Post.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=13HYkQMUySNdTnRJxaIrDVMPieNkPHCGa&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=13HYkQMUySNdTnRJxaIrDVMPieNkPHCGa&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=13HYkQMUySNdTnRJxaIrDVMPieNkPHCGa"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 02-11 - 03 Story",
+        "categoria": "03 Story",
+        "pastaUrl": "https://drive.google.com/drive/folders/1KP-meLNfZ0aeOHtMs4d-r1l6tGAqeP7M",
+        "arquivos": [
+          {
+            "driveFileId": "1wQj5Grajsye3Tde92xTo3clShITpel2y",
+            "nome": "01_Story.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1wQj5Grajsye3Tde92xTo3clShITpel2y&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1wQj5Grajsye3Tde92xTo3clShITpel2y&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1wQj5Grajsye3Tde92xTo3clShITpel2y"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 03-11 - 01 Carrossel",
+        "categoria": "01 Carrossel",
+        "pastaUrl": "https://drive.google.com/drive/folders/1BquDLIJWVanZPK2bFQuYZLxL6J24NCAd",
+        "arquivos": [
+          {
+            "driveFileId": "1aUaiO0x0GqKoM8i2L8o6d6A3P_cc6byL",
+            "nome": "01_Capa.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1aUaiO0x0GqKoM8i2L8o6d6A3P_cc6byL&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1aUaiO0x0GqKoM8i2L8o6d6A3P_cc6byL&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1aUaiO0x0GqKoM8i2L8o6d6A3P_cc6byL"
+          },
+          {
+            "driveFileId": "1FxWiUkAxhM_FlPPKwipa1x-oTWKU69Ki",
+            "nome": "02_Interna.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1FxWiUkAxhM_FlPPKwipa1x-oTWKU69Ki&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1FxWiUkAxhM_FlPPKwipa1x-oTWKU69Ki&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1FxWiUkAxhM_FlPPKwipa1x-oTWKU69Ki"
+          },
+          {
+            "driveFileId": "1G_u02u-UzoDnjUVMyFu9UQFpWDsWpIMV",
+            "nome": "03_Interna.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1G_u02u-UzoDnjUVMyFu9UQFpWDsWpIMV&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1G_u02u-UzoDnjUVMyFu9UQFpWDsWpIMV&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1G_u02u-UzoDnjUVMyFu9UQFpWDsWpIMV"
+          },
+          {
+            "driveFileId": "1S1AEf3FBRtsZ7WNADzzecXD4bdEA8qO-",
+            "nome": "04_Interna.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1S1AEf3FBRtsZ7WNADzzecXD4bdEA8qO-&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1S1AEf3FBRtsZ7WNADzzecXD4bdEA8qO-&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1S1AEf3FBRtsZ7WNADzzecXD4bdEA8qO-"
+          },
+          {
+            "driveFileId": "18O3vMb4oH0bRuere8ahm9eKZpTr7O-TY",
+            "nome": "05_Fechamento.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=18O3vMb4oH0bRuere8ahm9eKZpTr7O-TY&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=18O3vMb4oH0bRuere8ahm9eKZpTr7O-TY&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=18O3vMb4oH0bRuere8ahm9eKZpTr7O-TY"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 04-11 - 01 Carrossel",
+        "categoria": "01 Carrossel",
+        "pastaUrl": "https://drive.google.com/drive/folders/1bn-wVz6H90Umaxf4xj6QLSnrtnDC1nXf",
+        "arquivos": [
+          {
+            "driveFileId": "1Q7yIZBibWU0eP73bZf-xy4yYjEZFIbLu",
+            "nome": "01_Capa.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1Q7yIZBibWU0eP73bZf-xy4yYjEZFIbLu&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1Q7yIZBibWU0eP73bZf-xy4yYjEZFIbLu&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1Q7yIZBibWU0eP73bZf-xy4yYjEZFIbLu"
+          },
+          {
+            "driveFileId": "10iMP31L1idleBU0tcnxe9ojgP2uYckht",
+            "nome": "02_Interna.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=10iMP31L1idleBU0tcnxe9ojgP2uYckht&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=10iMP31L1idleBU0tcnxe9ojgP2uYckht&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=10iMP31L1idleBU0tcnxe9ojgP2uYckht"
+          },
+          {
+            "driveFileId": "17UY-5EWglvRTPkpmagWX3WOsHIYcfVIp",
+            "nome": "03_Interna.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=17UY-5EWglvRTPkpmagWX3WOsHIYcfVIp&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=17UY-5EWglvRTPkpmagWX3WOsHIYcfVIp&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=17UY-5EWglvRTPkpmagWX3WOsHIYcfVIp"
+          },
+          {
+            "driveFileId": "1DV3_3RbcM5VMQnO3FoA6djf3wUyT7lhy",
+            "nome": "04_Fechamento.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1DV3_3RbcM5VMQnO3FoA6djf3wUyT7lhy&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1DV3_3RbcM5VMQnO3FoA6djf3wUyT7lhy&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1DV3_3RbcM5VMQnO3FoA6djf3wUyT7lhy"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 04-11 - 02 Post unico",
+        "categoria": "02 Post unico",
+        "pastaUrl": "https://drive.google.com/drive/folders/1RclZxSzaothTLZ9DhIxzR43yA6Od5YGY",
+        "arquivos": [
+          {
+            "driveFileId": "1j7lV9ATP-2MGnaMC7OZKuUcmqs5Jdr_s",
+            "nome": "01_Post.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1j7lV9ATP-2MGnaMC7OZKuUcmqs5Jdr_s&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1j7lV9ATP-2MGnaMC7OZKuUcmqs5Jdr_s&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1j7lV9ATP-2MGnaMC7OZKuUcmqs5Jdr_s"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 04-11 - 03 Story",
+        "categoria": "03 Story",
+        "pastaUrl": "https://drive.google.com/drive/folders/1XkVym-XEOtYrFERYuQrNynie6admVi99",
+        "arquivos": [
+          {
+            "driveFileId": "1kFZ2zzYcepgZcTiugV9h05nQIjEu5MZi",
+            "nome": "01_Story.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1kFZ2zzYcepgZcTiugV9h05nQIjEu5MZi&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1kFZ2zzYcepgZcTiugV9h05nQIjEu5MZi&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1kFZ2zzYcepgZcTiugV9h05nQIjEu5MZi"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 05-11 - 01 Carrossel",
+        "categoria": "01 Carrossel",
+        "pastaUrl": "https://drive.google.com/drive/folders/1tP2V3FhOwAgcZDBedviWEO5go2ZCM3ft",
+        "arquivos": [
+          {
+            "driveFileId": "1Smzipeq3b8k284DULpOfTt5SD0Hkmx5_",
+            "nome": "01_Capa.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1Smzipeq3b8k284DULpOfTt5SD0Hkmx5_&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1Smzipeq3b8k284DULpOfTt5SD0Hkmx5_&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1Smzipeq3b8k284DULpOfTt5SD0Hkmx5_"
+          },
+          {
+            "driveFileId": "1WcIYqzxE93h_9JmRm7oovy0JrZf-o16m",
+            "nome": "02_Interna.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1WcIYqzxE93h_9JmRm7oovy0JrZf-o16m&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1WcIYqzxE93h_9JmRm7oovy0JrZf-o16m&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1WcIYqzxE93h_9JmRm7oovy0JrZf-o16m"
+          },
+          {
+            "driveFileId": "13Iz6OthazQ8IiGaMhdSVmZ0h9wUCQHSN",
+            "nome": "03_Interna.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=13Iz6OthazQ8IiGaMhdSVmZ0h9wUCQHSN&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=13Iz6OthazQ8IiGaMhdSVmZ0h9wUCQHSN&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=13Iz6OthazQ8IiGaMhdSVmZ0h9wUCQHSN"
+          },
+          {
+            "driveFileId": "1WOc7KvDEK1BUh6L_cnpd9gEQ07aliFDW",
+            "nome": "04_Fechamento.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1WOc7KvDEK1BUh6L_cnpd9gEQ07aliFDW&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1WOc7KvDEK1BUh6L_cnpd9gEQ07aliFDW&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1WOc7KvDEK1BUh6L_cnpd9gEQ07aliFDW"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 05-11 - 02 Post unico",
+        "categoria": "02 Post unico",
+        "pastaUrl": "https://drive.google.com/drive/folders/1CtvVUUTY3WAMZGabHI5CRf9_1Rl_P3-t",
+        "arquivos": [
+          {
+            "driveFileId": "1_wkFniGfOZjS-nPJEKavVJ3BeNEBgAPB",
+            "nome": "01_Post.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1_wkFniGfOZjS-nPJEKavVJ3BeNEBgAPB&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1_wkFniGfOZjS-nPJEKavVJ3BeNEBgAPB&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1_wkFniGfOZjS-nPJEKavVJ3BeNEBgAPB"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 05-11 - 03 Story",
+        "categoria": "03 Story",
+        "pastaUrl": "https://drive.google.com/drive/folders/1kzVYq21V2sAK7uq-cfN3m6tj6VXacf39",
+        "arquivos": [
+          {
+            "driveFileId": "1YltTwPXOyYOTXOUJ6X65kqnX_pXbRnb1",
+            "nome": "01_Story.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1YltTwPXOyYOTXOUJ6X65kqnX_pXbRnb1&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1YltTwPXOyYOTXOUJ6X65kqnX_pXbRnb1&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1YltTwPXOyYOTXOUJ6X65kqnX_pXbRnb1"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 06-11 - 01 Post unico",
+        "categoria": "01 Post unico",
+        "pastaUrl": "https://drive.google.com/drive/folders/1PQFaoU_KBKD8Q-meJqbbCYdW_GVJybc6",
+        "arquivos": [
+          {
+            "driveFileId": "1hTaFeewY9_3y990T1mX3EPcRiZ6QBvUG",
+            "nome": "01_Post.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1hTaFeewY9_3y990T1mX3EPcRiZ6QBvUG&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1hTaFeewY9_3y990T1mX3EPcRiZ6QBvUG&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1hTaFeewY9_3y990T1mX3EPcRiZ6QBvUG"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 06-11 - 02 Post unico",
+        "categoria": "02 Post unico",
+        "pastaUrl": "https://drive.google.com/drive/folders/1P4lAO31GL2Z56f32-ZbzP1Uc57kdo1rb",
+        "arquivos": [
+          {
+            "driveFileId": "1hvVGC-71pErHAh1BEGonmhd5fx2-8-ru",
+            "nome": "01_Post.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1hvVGC-71pErHAh1BEGonmhd5fx2-8-ru&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1hvVGC-71pErHAh1BEGonmhd5fx2-8-ru&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1hvVGC-71pErHAh1BEGonmhd5fx2-8-ru"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 06-11 - 03 Post unico",
+        "categoria": "03 Post unico",
+        "pastaUrl": "https://drive.google.com/drive/folders/1iS8SZtwP7EijUzf3FJwqQV_qQcht32Mz",
+        "arquivos": [
+          {
+            "driveFileId": "1DLO_CGKY8hmMtM9nJ_ji2JRvIVBfks5R",
+            "nome": "01_Post.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1DLO_CGKY8hmMtM9nJ_ji2JRvIVBfks5R&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1DLO_CGKY8hmMtM9nJ_ji2JRvIVBfks5R&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1DLO_CGKY8hmMtM9nJ_ji2JRvIVBfks5R"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 07-11 - 01 Post unico",
+        "categoria": "01 Post unico",
+        "pastaUrl": "https://drive.google.com/drive/folders/1fcTmt3cm_-A05baLIq-NqQWgxTkoNyKf",
+        "arquivos": [
+          {
+            "driveFileId": "1cAsDC6b2gGMX4mkwFHz84P0GHlteWJdC",
+            "nome": "01_Post.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1cAsDC6b2gGMX4mkwFHz84P0GHlteWJdC&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1cAsDC6b2gGMX4mkwFHz84P0GHlteWJdC&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1cAsDC6b2gGMX4mkwFHz84P0GHlteWJdC"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 07-11 - 02 Post unico",
+        "categoria": "02 Post unico",
+        "pastaUrl": "https://drive.google.com/drive/folders/1bpIS7bKZzqPoRF77lrmY9fUhJ-6Q8hOB",
+        "arquivos": [
+          {
+            "driveFileId": "1b8Wdk-guv57zLehkCzJ4hmUrI7gxGEDn",
+            "nome": "01_Post.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1b8Wdk-guv57zLehkCzJ4hmUrI7gxGEDn&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1b8Wdk-guv57zLehkCzJ4hmUrI7gxGEDn&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1b8Wdk-guv57zLehkCzJ4hmUrI7gxGEDn"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 07-11 - 03 Story",
+        "categoria": "03 Story",
+        "pastaUrl": "https://drive.google.com/drive/folders/1W8wzqZIKS4uEjGCUSWk5_xyhiG5RHvCm",
+        "arquivos": [
+          {
+            "driveFileId": "1JGLEfBH2vnErDgzkuXiOkP5lzlJcPxFL",
+            "nome": "01_Story.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1JGLEfBH2vnErDgzkuXiOkP5lzlJcPxFL&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1JGLEfBH2vnErDgzkuXiOkP5lzlJcPxFL&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1JGLEfBH2vnErDgzkuXiOkP5lzlJcPxFL"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 08-11 - 01 Post unico",
+        "categoria": "01 Post unico",
+        "pastaUrl": "https://drive.google.com/drive/folders/1onfF8ewIjxOnGmZ1Y7NYjwPwLH_RI7aZ",
+        "arquivos": [
+          {
+            "driveFileId": "1fyP8Z_M29zYYhyC2jnOe5JHEev-pYbhx",
+            "nome": "01_Post.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1fyP8Z_M29zYYhyC2jnOe5JHEev-pYbhx&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1fyP8Z_M29zYYhyC2jnOe5JHEev-pYbhx&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1fyP8Z_M29zYYhyC2jnOe5JHEev-pYbhx"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 08-11 - 02 Post unico",
+        "categoria": "02 Post unico",
+        "pastaUrl": "https://drive.google.com/drive/folders/1oneIoxIGF3-oHeYaGBzJHXEt4tM0ujKX",
+        "arquivos": [
+          {
+            "driveFileId": "1XosS3CStsmwTE4p0GNHvn1-PrIXydIC7",
+            "nome": "01_Post.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1XosS3CStsmwTE4p0GNHvn1-PrIXydIC7&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1XosS3CStsmwTE4p0GNHvn1-PrIXydIC7&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1XosS3CStsmwTE4p0GNHvn1-PrIXydIC7"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 08-11 - 03 Story",
+        "categoria": "03 Story",
+        "pastaUrl": "https://drive.google.com/drive/folders/1ibI0p9q35ceBBb87IWZA8kyaT1yu6f57",
+        "arquivos": [
+          {
+            "driveFileId": "1wkkP8S2zCTyhRVkJ29Ny3rSxcqbeK3Lc",
+            "nome": "01_Story.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1wkkP8S2zCTyhRVkJ29Ny3rSxcqbeK3Lc&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1wkkP8S2zCTyhRVkJ29Ny3rSxcqbeK3Lc&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1wkkP8S2zCTyhRVkJ29Ny3rSxcqbeK3Lc"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 09-11 - 01 Post unico",
+        "categoria": "01 Post unico",
+        "pastaUrl": "https://drive.google.com/drive/folders/1sxGJttVbzzhJXl7qjiKYoi6NT1OLIvQe",
+        "arquivos": [
+          {
+            "driveFileId": "1uM-ra55tkN7LstxUUMxT8stjg_6tRHjB",
+            "nome": "01_Post.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1uM-ra55tkN7LstxUUMxT8stjg_6tRHjB&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1uM-ra55tkN7LstxUUMxT8stjg_6tRHjB&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1uM-ra55tkN7LstxUUMxT8stjg_6tRHjB"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 09-11 - 02 Post unico",
+        "categoria": "02 Post unico",
+        "pastaUrl": "https://drive.google.com/drive/folders/1itShvHQdcvSGfM9RXSu720UlmB1q3KFG",
+        "arquivos": [
+          {
+            "driveFileId": "1SWVOgRa6k-o30Btf-bnnhrN_3WKJSCAY",
+            "nome": "01_Post.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1SWVOgRa6k-o30Btf-bnnhrN_3WKJSCAY&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1SWVOgRa6k-o30Btf-bnnhrN_3WKJSCAY&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1SWVOgRa6k-o30Btf-bnnhrN_3WKJSCAY"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 09-11 - 03 Story",
+        "categoria": "03 Story",
+        "pastaUrl": "https://drive.google.com/drive/folders/1L6UjHbOuwvavS4mi9Jvn5MY317HGasMX",
+        "arquivos": [
+          {
+            "driveFileId": "1JVJ_KQNr09tMEbMKhjeIcjdKjmwQKwJR",
+            "nome": "01_Story.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1JVJ_KQNr09tMEbMKhjeIcjdKjmwQKwJR&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1JVJ_KQNr09tMEbMKhjeIcjdKjmwQKwJR&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1JVJ_KQNr09tMEbMKhjeIcjdKjmwQKwJR"
+          }
+        ]
+      },
       {
         "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
         "pastaClienteNome": "Ato",
@@ -523,6 +1052,89 @@
       {
         "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
         "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 31-10 - 01 Carrossel",
+        "categoria": "01 Carrossel",
+        "pastaUrl": "https://drive.google.com/drive/folders/18HvIHklhsw8qSyJASu13bZM6AMk-h8Fr",
+        "arquivos": [
+          {
+            "driveFileId": "1966Evg17Dp9AbOUh4dKAN9hddRFHnR2T",
+            "nome": "01_Capa.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1966Evg17Dp9AbOUh4dKAN9hddRFHnR2T&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1966Evg17Dp9AbOUh4dKAN9hddRFHnR2T&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1966Evg17Dp9AbOUh4dKAN9hddRFHnR2T"
+          },
+          {
+            "driveFileId": "1-UyEJI5wjPJ1jbgOYH6xIpm385l0G4FW",
+            "nome": "02_Interna.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1-UyEJI5wjPJ1jbgOYH6xIpm385l0G4FW&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1-UyEJI5wjPJ1jbgOYH6xIpm385l0G4FW&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1-UyEJI5wjPJ1jbgOYH6xIpm385l0G4FW"
+          },
+          {
+            "driveFileId": "1R6pz3F10aqEiuMOpdqL1S7zIxhoW1ycZ",
+            "nome": "03_Interna.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1R6pz3F10aqEiuMOpdqL1S7zIxhoW1ycZ&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1R6pz3F10aqEiuMOpdqL1S7zIxhoW1ycZ&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1R6pz3F10aqEiuMOpdqL1S7zIxhoW1ycZ"
+          },
+          {
+            "driveFileId": "175gx_vdElMWQbhs2e_MratH6GiudVvYU",
+            "nome": "04_Interna.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=175gx_vdElMWQbhs2e_MratH6GiudVvYU&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=175gx_vdElMWQbhs2e_MratH6GiudVvYU&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=175gx_vdElMWQbhs2e_MratH6GiudVvYU"
+          },
+          {
+            "driveFileId": "112cA2-iyKaiX4-VkV84snU9HmKs42IOb",
+            "nome": "05_Fechamento.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=112cA2-iyKaiX4-VkV84snU9HmKs42IOb&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=112cA2-iyKaiX4-VkV84snU9HmKs42IOb&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=112cA2-iyKaiX4-VkV84snU9HmKs42IOb"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 31-10 - 02 Post unico",
+        "categoria": "02 Post unico",
+        "pastaUrl": "https://drive.google.com/drive/folders/1VxmnulGHxutU68Io-YaZzqlONUNOkqwS",
+        "arquivos": [
+          {
+            "driveFileId": "1JGqfqeJ9aiNPJDJaO6ZP1G5ajN2EBLcy",
+            "nome": "01_Post.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1JGqfqeJ9aiNPJDJaO6ZP1G5ajN2EBLcy&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1JGqfqeJ9aiNPJDJaO6ZP1G5ajN2EBLcy&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1JGqfqeJ9aiNPJDJaO6ZP1G5ajN2EBLcy"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - 1 31-10 - 03 Story",
+        "categoria": "03 Story",
+        "pastaUrl": "https://drive.google.com/drive/folders/1VFrLYgfhX7UvNb28sjE-B74UYqd_cBZa",
+        "arquivos": [
+          {
+            "driveFileId": "1PovjK-GlcvHphDqW_JNMSb9EThHa4vWP",
+            "nome": "01_Story.png",
+            "mimeType": "image/png",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1PovjK-GlcvHphDqW_JNMSb9EThHa4vWP&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1PovjK-GlcvHphDqW_JNMSb9EThHa4vWP&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1PovjK-GlcvHphDqW_JNMSb9EThHa4vWP"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
         "loteNome": "Ato - 2 23-10 - 01 Carrossel",
         "categoria": "01 Carrossel",
         "pastaUrl": "https://drive.google.com/drive/folders/12qkDusghffSa9DZEwOtHvup-JOnGsAW8",
@@ -667,6 +1279,40 @@
             "viewUrl": "https://drive.google.com/thumbnail?id=1ifw98-kJ0loOg6lkgWpvtxZg_48Ny1o0&sz=w1200",
             "thumbnailUrl": "https://drive.google.com/thumbnail?id=1ifw98-kJ0loOg6lkgWpvtxZg_48Ny1o0&sz=w1200",
             "downloadUrl": "https://drive.google.com/uc?export=download&id=1ifw98-kJ0loOg6lkgWpvtxZg_48Ny1o0"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - Vídeos - ato-servicos-9x16.mp4",
+        "categoria": "Vídeos",
+        "pastaUrl": "https://drive.google.com/drive/folders/1ptQ8tPFShe_dR4VjxAGGi466E1OYoXtG",
+        "arquivos": [
+          {
+            "driveFileId": "1FNJCfpmsB4VlJ_iAqJAnzYKFbsl7Qjnu",
+            "nome": "ato-servicos-9x16.mp4",
+            "mimeType": "video/mp4",
+            "viewUrl": "https://drive.google.com/thumbnail?id=1FNJCfpmsB4VlJ_iAqJAnzYKFbsl7Qjnu&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=1FNJCfpmsB4VlJ_iAqJAnzYKFbsl7Qjnu&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=1FNJCfpmsB4VlJ_iAqJAnzYKFbsl7Qjnu"
+          }
+        ]
+      },
+      {
+        "pastaClienteId": "1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF",
+        "pastaClienteNome": "Ato",
+        "loteNome": "Ato - Vídeos - estrutura-vendas-ato.mp4",
+        "categoria": "Vídeos",
+        "pastaUrl": "https://drive.google.com/drive/folders/1ptQ8tPFShe_dR4VjxAGGi466E1OYoXtG",
+        "arquivos": [
+          {
+            "driveFileId": "18WhrAVcfyB9Cx6pRfQJJlrVkGtT7czgX",
+            "nome": "estrutura-vendas-ato.mp4",
+            "mimeType": "video/mp4",
+            "viewUrl": "https://drive.google.com/thumbnail?id=18WhrAVcfyB9Cx6pRfQJJlrVkGtT7czgX&sz=w1200",
+            "thumbnailUrl": "https://drive.google.com/thumbnail?id=18WhrAVcfyB9Cx6pRfQJJlrVkGtT7czgX&sz=w1200",
+            "downloadUrl": "https://drive.google.com/uc?export=download&id=18WhrAVcfyB9Cx6pRfQJJlrVkGtT7czgX"
           }
         ]
       }

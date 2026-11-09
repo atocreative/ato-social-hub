@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
+    "dev": "tsx server.ts --local-db",
     "start": "tsx server.ts",
     "worker:start": "tsx src/worker.ts start",
     "scheduler:once": "tsx src/worker.ts once",

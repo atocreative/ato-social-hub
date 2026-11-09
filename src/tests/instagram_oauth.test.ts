@@ -10,7 +10,7 @@ const BASE_URL = 'http://localhost:3000';
 
 test('Instagram OAuth 2.0 & Admin Approval Workflow', async () => {
   // 1. Check Instagram OAuth URL endpoint
-  const expectedRedirectUri = 'https://ato-social-hub.ai.studio/api/auth/instagram/callback';
+  const expectedRedirectUri = 'https://socialhub.atodev.com.br/api/auth/instagram/callback';
   const urlRes = await fetch(`${BASE_URL}/api/auth/instagram/url`);
   assert.equal(urlRes.status, 200);
   const urlData = await urlRes.json();
@@ -20,7 +20,9 @@ test('Instagram OAuth 2.0 & Admin Approval Workflow', async () => {
   assert.ok(urlData.url.includes('force_reauth=true'));
   assert.ok(urlData.url.includes('client_id=1638364467693255'));
   assert.ok(
-    urlData.url.includes('redirect_uri=https://ato-social-hub.ai.studio/api/auth/instagram/callback')
+    urlData.url.includes(
+      `redirect_uri=${encodeURIComponent('https://socialhub.atodev.com.br/api/auth/instagram/callback')}`
+    )
   );
   assert.ok(urlData.url.includes('response_type=code'));
   assert.ok(

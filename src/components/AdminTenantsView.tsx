@@ -726,6 +726,11 @@ export const AdminTenantsView: React.FC<AdminTenantsViewProps> = ({
                       <td className="py-3.5 px-4">
                         <div className="font-semibold text-white">@{tenant.username}</div>
                         <div className="text-[11px] text-[#8E8E93]">{tenant.nome}</div>
+                        {tenant.instagramUserId && (
+                          <div className="text-[10px] font-mono text-[#636366]">
+                            Instagram User ID: {tenant.instagramUserId}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3.5 px-4">
                         <span className="text-[11px] text-[#F59E0B] border border-[#F59E0B]/30 bg-[#F59E0B]/10 px-2 py-0.5 rounded">

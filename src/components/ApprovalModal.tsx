@@ -8,7 +8,7 @@ import {
 import { api } from '../services/api.ts';
 import { formatUtcToSaoPauloParts } from '../utils/postHelpers.ts';
 import { CarouselViewer } from './CarouselViewer.tsx';
-import { driveThumbUrl } from '../utils/mediaUrl.ts';
+import { MediaImage } from './MediaImage.tsx';
 import {
   X,
   Sparkles,
@@ -467,23 +467,10 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
                     : 'aspect-square max-h-[260px]'
                 } overflow-hidden rounded flex items-center justify-center`}
               >
-                <img
-                  src={driveThumbUrl(post.items[0]?.driveFileId, 1600) || post.items[0]?.viewUrl || post.items[0]?.thumbnailUrl}
-                  loading="lazy"
-                  decoding="async"
+                <MediaImage
+                  item={post.items[0]}
+                  width={1600}
                   alt={post.nome}
-                  referrerPolicy="no-referrer"
-                  onError={(e) => {
-                    const target = e.currentTarget;
-                    const item = post.items[0];
-                    if (!item) return;
-                    const thumbFallback = item.driveFileId
-                      ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(item.driveFileId)}&sz=w1200`
-                      : '';
-                    if (thumbFallback && target.src !== thumbFallback) {
-                      target.src = thumbFallback;
-                    }
-                  }}
                   className="w-full h-full object-contain"
                 />
               </div>

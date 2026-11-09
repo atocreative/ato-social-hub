@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Shield, FileText, Trash2, ArrowLeft, CheckCircle2, Mail } from 'lucide-react';
+import { BrandLogo } from './BrandLogo.tsx';
 
 export type LegalRoute = '/privacidade' | '/termos' | '/exclusao-de-dados';
 
@@ -70,9 +71,9 @@ export const PublicLegalPage: React.FC<PublicLegalPageProps> = ({ route, onNavig
             <a
               href="/"
               onClick={(e) => handleLinkClick(e, '/')}
-              className="text-xl font-bold tracking-tight text-white font-mono hover:opacity-90 transition-opacity"
+              className="inline-flex hover:opacity-90 transition-opacity"
             >
-              ATO<span className="text-[#10B981]">.</span>
+              <BrandLogo variant="white" height={28} />
             </a>
             <span className="text-xs text-[#8E8E93] border-l border-[#242424] pl-3">
               ATO Social Hub · Central Legal & Conformidade Meta

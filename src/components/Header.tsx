@@ -1,5 +1,6 @@
 import React from 'react';
 import { UserProfile } from '../types/index.ts';
+import { BrandLogo } from './BrandLogo.tsx';
 
 interface HeaderProps {
   user: UserProfile;
@@ -27,9 +28,7 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
         {/* Brand */}
         <div className="flex items-center gap-4">
-          <span className="text-lg font-bold tracking-tight text-white font-mono">
-            ATO<span className="text-[#10B981]">.</span>
-          </span>
+          <BrandLogo variant="dot" height={26} />
 
           {/* Navigation for Admin */}
           {isAdmin && onNavigateView && (

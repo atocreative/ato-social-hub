@@ -39,7 +39,7 @@ export interface OAuthConnectResult {
   fbtraceId?: string;
   accountType?: string;
   tenant?: TenantAccount;
-  tokenType?: 'LONG_LIVED' | 'SHORT_LIVED';
+  tokenType?: string;
   tokenIssuedAt?: string;
   tokenExpiresAt?: string;
   grantedScopes?: string[];
@@ -506,7 +506,7 @@ export class TokenService {
     avatarUrl?: string;
     plainAccessToken?: string;
     encryptedAccessToken?: string;
-    tokenType?: 'LONG_LIVED' | 'SHORT_LIVED';
+    tokenType?: string;
     tokenIssuedAt?: string;
     tokenExpiresAt?: string;
     grantedScopes?: string[];

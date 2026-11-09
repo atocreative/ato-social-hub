@@ -2,13 +2,15 @@ import React, { useState, useRef, useEffect } from 'react';
 import { PostGroup } from '../types/index.ts';
 import { CarouselViewer } from './CarouselViewer.tsx';
 import { MediaLightboxModal } from './MediaLightboxModal.tsx';
-import { driveThumbUrl } from '../utils/mediaUrl.ts';
 import {
   formatDateTimeBR,
   getAspectRatioBadge,
   detectAspectRatioFromDimensions,
   MediaAspectRatio,
 } from '../utils/postHelpers.ts';
+import { MediaDownloadButton } from './MediaDownloadButton.tsx';
+import { MediaImage } from './MediaImage.tsx';
+import { getMediaKind, getDrivePreviewUrl } from '../utils/mediaKind.ts';
 import { MoreVertical, Eye, EyeOff, Trash2, Maximize2 } from 'lucide-react';
 
 interface PostCardProps {
@@ -252,12 +254,30 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onApprove, onReject, o
               onClick={() => handleOpenLightbox(0)}
               className={`relative w-full ${singleContainerAspectClass} bg-[#121212] border border-[#242424] rounded-lg overflow-hidden flex items-center justify-center cursor-zoom-in group transition-all`}
             >
-              <img
-                src={driveThumbUrl(firstItem?.driveFileId, 400) || firstItem?.viewUrl || firstItem?.thumbnailUrl}
+              {getMediaKind(firstItem, post.categoria) === 'video' ? (
+                getDrivePreviewUrl(firstItem?.driveFileId) ? (
+                  <iframe
+                    src={getDrivePreviewUrl(firstItem?.driveFileId)}
+                    title={firstItem?.nome || post.nome}
+                    allow="autoplay; fullscreen"
+                    allowFullScreen
+                    className="w-full h-full bg-black"
+                  />
+                ) : (
+                  <video
+                    src={firstItem?.viewUrl}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    onClick={(e) => e.stopPropagation()}
+                    className="w-full h-full object-contain bg-black"
+                  />
+                )
+              ) : (
+              <MediaImage
+                item={firstItem}
+                width={400}
                 alt={post.nome}
-                loading="lazy"
-                decoding="async"
-                referrerPolicy="no-referrer"
                 onLoad={(e) => {
                   const { naturalWidth, naturalHeight } = e.currentTarget;
                   if (naturalWidth > 0 && naturalHeight > 0) {
@@ -269,22 +289,28 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onApprove, onReject, o
                     });
                   }
                 }}
-                onError={(e) => {
-                  const target = e.currentTarget;
-                  const item = post.items[0];
-                  if (!item) return;
-                  const thumbFallback =
-                    item.thumbnailUrl && target.src !== item.thumbnailUrl
-                      ? item.thumbnailUrl
-                      : item.driveFileId
-                      ? `https://drive.google.com/thumbnail?id=${encodeURIComponent(item.driveFileId)}&sz=w1200`
-                      : '';
-                  if (thumbFallback && target.src !== thumbFallback) {
-                    target.src = thumbFallback;
-                  }
-                }}
                 className="w-full h-full object-cover"
               />
+              )}
+
+              {/* Download em qualidade original */}
+              <div className="absolute top-2.5 left-2.5 z-10">
+                <MediaDownloadButton item={firstItem} compact />
+              </div>
+
+              {getMediaKind(firstItem, post.categoria) === 'video' ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleOpenLightbox(0);
+                  }}
+                  className="absolute bottom-2.5 right-2.5 z-10 px-2 py-1 rounded-md bg-[#0A0A0A]/85 text-white border border-[#2E2E2E] hover:border-[#10B981] text-[11px] font-medium flex items-center gap-1 shadow-sm"
+                >
+                  <Maximize2 className="w-3 h-3 text-[#10B981]" />
+                  <span>Ampliar</span>
+                </button>
+              ) : null}
 
               {/* Discrete Expand Icon on Hover */}
               <div className="absolute bottom-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">

@@ -2,6 +2,7 @@ import dotenv from 'dotenv';
 import express, { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import path from 'path';
+import { Readable } from 'stream';
 import fs from 'fs';
 import nodeCrypto from 'crypto';
 import { fileURLToPath } from 'url';
@@ -39,6 +40,17 @@ import {
   IG_USER_MSG_PERSONAL_ACCOUNT,
   IG_USER_MSG_PERMISSION_RESTRICTED,
   IG_USER_MSG_TEMPORARY_ERROR,
+  IG_OAUTH_DIALOG_URL,
+  IG_GRAPH_BASE_URL,
+  IG_GRAPH_API_VERSION,
+  IG_UNIFIED_GRAPH_BASE_URL,
+  IG_UNIFIED_GRAPH_API_VERSION,
+  UNIFIED_TOKEN_TYPE,
+  igGraphBase,
+  IgLoginMode,
+  getInstagramLoginConfigId,
+  exchangeUnifiedLoginCode,
+  fetchAssignedInstagramAccounts,
 } from './src/services/instagramCore.ts';
 import {
   DatabaseUnavailableError,
@@ -61,6 +73,8 @@ import {
   upsertInstagramAccount,
   deleteInstagramAccountFromDb,
   listPostGroupsFromDb,
+  listUnavailableMediaIdsFromDb,
+  markMediaUnavailableInDb,
   getPostGroupByIdFromDb,
   upsertPostGroupToDb,
   deletePostGroupFromDb,
@@ -115,8 +129,15 @@ const __dirname = path.dirname(__filename);
 
 export const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-const REDIRECT_URI = 'https://ato-social-hub.ai.studio/api/auth/instagram/callback';
-let lastAuthorizedRedirectUri: string = REDIRECT_URI;
+// Segredos e URLs nunca têm valor fixo no código. Em produção o servidor não sobe sem JWT_SECRET.
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const EPHEMERAL_JWT_SECRET = nodeCrypto.randomBytes(32).toString('hex');
+if (IS_PRODUCTION && !String(process.env.JWT_SECRET || '').trim()) {
+  throw new Error('JWT_SECRET ausente em produção. Configure a variável no Railway antes de subir o app.');
+}
+
+// Sem fallback para domínio antigo: o redirect vem de INSTAGRAM_REDIRECT_URI ou de APP_URL.
+let lastAuthorizedRedirectUri: string = '';
 
 function getEffectiveInstagramRedirectUri(): string {
   const fromEnv = String(process.env.INSTAGRAM_REDIRECT_URI || '')
@@ -126,7 +147,10 @@ function getEffectiveInstagramRedirectUri(): string {
   if (fromEnv && fromEnv.startsWith('http')) {
     return fromEnv;
   }
-  return REDIRECT_URI;
+  const appBase = String(process.env.APP_URL || process.env.APP_BASE_URL || '')
+    .trim()
+    .replace(/\/+$/, '');
+  return appBase.startsWith('https://') ? `${appBase}/api/auth/instagram/callback` : '';
 }
 
 function sanitizeEnvValue(val?: string): string {
@@ -213,30 +237,28 @@ function getEnv() {
   delete process.env.INSTAGRAM_USER_NAME;
   delete process.env.INSTAGRAM_USER_ID;
 
-  const rawAppId = sanitizeEnvValue(process.env.INSTAGRAM_APP_ID) || '1638364467693255';
+  const rawAppId = sanitizeEnvValue(process.env.INSTAGRAM_APP_ID) || '';
   const rawAppSecret = sanitizeEnvValue(process.env.INSTAGRAM_APP_SECRET);
 
-  const cleanAppId = !isPlaceholderOrEmpty(rawAppId) ? rawAppId : '1638364467693255';
+  const cleanAppId = !isPlaceholderOrEmpty(rawAppId) ? rawAppId : '';
   const cleanAppSecret = !isPlaceholderOrEmpty(rawAppSecret) ? rawAppSecret : '';
 
   process.env.INSTAGRAM_APP_ID = cleanAppId;
   process.env.INSTAGRAM_APP_SECRET = cleanAppSecret;
 
   return {
-    JWT_SECRET: sanitizeEnvValue(process.env.JWT_SECRET) || 'ato_super_secret_key_2026_998877',
-    WEBHOOK_SECRET_TOKEN:
-      sanitizeEnvValue(process.env.WEBHOOK_SECRET_TOKEN) || 'ato_webhook_sync_token_884422',
+    JWT_SECRET: sanitizeEnvValue(process.env.JWT_SECRET) || EPHEMERAL_JWT_SECRET,
+    WEBHOOK_SECRET_TOKEN: sanitizeEnvValue(process.env.WEBHOOK_SECRET_TOKEN) || '',
     GOOGLE_APPS_SCRIPT_URL:
       sanitizeEnvValue(process.env.GOOGLE_APPS_SCRIPT_URL) ||
       sanitizeEnvValue(process.env.GAS_WEBHOOK_URL) ||
-      'https://script.google.com/macros/s/AKfycbwq9EAn9TbPzq87O6yVT61KY2qd-w0wpX09hMqviu-4Gu3Lskzvb73RPvTr98FK0Z1rFQ/exec',
+      '',
     APP_URL: sanitizeEnvValue(process.env.APP_URL) || '',
     META_ACCESS_TOKEN: sanitizeEnvValue(process.env.META_ACCESS_TOKEN) || '',
     INSTAGRAM_ACCOUNT_ID: sanitizeEnvValue(process.env.INSTAGRAM_ACCOUNT_ID) || '',
     INSTAGRAM_APP_ID: cleanAppId,
     INSTAGRAM_APP_SECRET: cleanAppSecret,
-    META_VERIFY_TOKEN:
-      sanitizeEnvValue(process.env.META_VERIFY_TOKEN) || 'ato_meta_webhook_2026',
+    META_VERIFY_TOKEN: sanitizeEnvValue(process.env.META_VERIFY_TOKEN) || '',
   };
 }
 
@@ -277,6 +299,8 @@ let tenants: TenantAccount[] = [...initialTenants];
 let rawDriveItems: DriveImageItem[] = [...initialMockDriveItems];
 let postGroups: PostGroup[] = groupAndSortDriveItems(rawDriveItems);
 let postGroupsMeta: Record<string, Partial<PostGroup>> = {};
+// Ids (driveFileId) de mídias cujo arquivo não existe mais no Drive: somem das listagens.
+const unavailableMediaIds = new Set<string>();
 let adminAlerts: AdminAlertNotification[] = [];
 let schedulerRuns: SchedulerRunSummary[] = [];
 const driveFoldersMap = new Map<string, { id: string; nome: string; url?: string }>();
@@ -449,6 +473,13 @@ export async function syncStateFromPostgres(force: boolean = false): Promise<voi
       listUnresolvedAdminAlertsFromDb(),
       listRecentSchedulerRunsFromDb(15),
     ]);
+  try {
+    const unavailableIds = await listUnavailableMediaIdsFromDb();
+    unavailableMediaIds.clear();
+    for (const id of unavailableIds) unavailableMediaIds.add(id);
+  } catch (e: any) {
+    console.warn('[Media Unavailable] Aviso ao carregar mídias indisponíveis:', e?.message);
+  }
 
   driveFoldersMap.clear();
   for (const comp of companiesFromDb) {
@@ -618,7 +649,11 @@ function saveDatabaseToDisk() {
   // Enfileira persistência imediata no PostgreSQL (nunca grava em .data/database.json).
   pendingPostgresWritePromise = pendingPostgresWritePromise
     .catch(() => {})
-    .then(() => persistStateToPostgres());
+    .then(() => persistStateToPostgres())
+    .catch((err: any) => {
+      // Erro de persistência não pode virar unhandled rejection (derrubava o processo Node).
+      console.error('[PostgreSQL] Falha ao persistir estado:', err?.message || err);
+    });
 }
 
 export async function flushPendingPostgresWrites(): Promise<void> {
@@ -870,6 +905,8 @@ function processIncomingPayload(payload: any): {
     }
 
     const categoriaNormalizada = normalizeCategoria(rawCategoria, arquivosArray.length);
+    const loteEhVideo =
+      String(lote.tipoMidia || '').toLowerCase() === 'video' || categoriaNormalizada === 'Vídeos';
 
     for (let arqIdx = 0; arqIdx < arquivosArray.length; arqIdx++) {
       const arquivo = arquivosArray[arqIdx];
@@ -899,7 +936,7 @@ function processIncomingPayload(payload: any): {
         viewUrl: resolvedViewUrl,
         thumbnailUrl: resolvedThumbnailUrl,
         downloadUrl: arquivo.downloadUrl ? String(arquivo.downloadUrl) : undefined,
-        mimeType: arquivo.mimeType ? String(arquivo.mimeType) : 'image/png',
+        mimeType: resolveItemMimeType(arquivo.mimeType, nomeArquivo, loteEhVideo),
         dataCriacao: String(arquivo.dataCriacao || lote.timestamp || payload.timestamp || new Date().toISOString()),
         status: arquivo.status || 'PENDENTE',
         ordem: arquivo.ordem !== undefined ? Number(arquivo.ordem) : arqIdx + 1,
@@ -996,6 +1033,46 @@ async function listDriveEmbeddedEntries(folderId: string): Promise<DriveEmbedded
   }
 }
 
+const DRIVE_VIDEO_EXT = /\.(mp4|mov|webm|m4v)$/i;
+
+function isVideoFileName(name: string): boolean {
+  return DRIVE_VIDEO_EXT.test(name || '');
+}
+
+function mimeTypeFromFileName(name: string): string {
+  const n = (name || '').toLowerCase();
+  if (n.endsWith('.jpg') || n.endsWith('.jpeg')) return 'image/jpeg';
+  if (n.endsWith('.mp4') || n.endsWith('.m4v')) return 'video/mp4';
+  if (n.endsWith('.mov')) return 'video/quicktime';
+  if (n.endsWith('.webm')) return 'video/webm';
+  return 'image/png';
+}
+
+/** Um vídeo vira um lote próprio com categoria "Vídeos" (nunca carrossel). */
+function buildVideoLote(
+  pasta: { id: string; nome: string },
+  folder: { id: string; title: string; href?: string },
+  file: { id: string; title: string }
+) {
+  return {
+    pastaClienteId: pasta.id,
+    pastaClienteNome: pasta.nome,
+    loteNome: `${pasta.nome} - ${folder.title} - ${file.title}`,
+    categoria: 'Vídeos',
+    pastaUrl: folder.href || `https://drive.google.com/drive/folders/${folder.id}`,
+    arquivos: [
+      {
+        driveFileId: file.id,
+        nome: file.title,
+        mimeType: mimeTypeFromFileName(file.title),
+        viewUrl: `https://drive.google.com/thumbnail?id=${encodeURIComponent(file.id)}&sz=w1200`,
+        thumbnailUrl: `https://drive.google.com/thumbnail?id=${encodeURIComponent(file.id)}&sz=w1200`,
+        downloadUrl: `https://drive.google.com/uc?export=download&id=${encodeURIComponent(file.id)}`,
+      },
+    ],
+  };
+}
+
 async function crawlDriveClientFolderLotes(pasta: {
   id: string;
   nome: string;
@@ -1021,6 +1098,10 @@ async function crawlDriveClientFolderLotes(pasta: {
         const catLower = catFolder.title.toLowerCase();
         if (catLower === 'reprovados') continue;
         const files = (await listDriveEmbeddedEntries(catFolder.id)).filter((f) => !f.isFolder);
+        if (/v[ií]deo/i.test(catFolder.title)) {
+          for (const v of files) lotes.push(buildVideoLote(pasta, catFolder, v));
+          continue;
+        }
         if (files.length > 0) {
           lotes.push({
             pastaClienteId: pasta.id,
@@ -1042,21 +1123,28 @@ async function crawlDriveClientFolderLotes(pasta: {
 
       // Se houver arquivos diretamente dentro da subpasta (ex: pasta de lote ou Uploads)
       if (directFiles.length > 0) {
-        lotes.push({
-          pastaClienteId: pasta.id,
-          pastaClienteNome: pasta.nome,
-          loteNome: `${pasta.nome} - ${sub.title}`,
-          categoria: directFiles.length > 1 ? '02 Carrossel' : '01 Post unico',
-          pastaUrl: sub.href || `https://drive.google.com/drive/folders/${sub.id}`,
-          arquivos: directFiles.map((f) => ({
-            driveFileId: f.id,
-            nome: f.title,
-            mimeType: f.title.toLowerCase().endsWith('.jpg') || f.title.toLowerCase().endsWith('.jpeg') ? 'image/jpeg' : 'image/png',
-            viewUrl: `https://drive.google.com/thumbnail?id=${encodeURIComponent(f.id)}&sz=w1200`,
-            thumbnailUrl: `https://drive.google.com/thumbnail?id=${encodeURIComponent(f.id)}&sz=w1200`,
-            downloadUrl: `https://drive.google.com/uc?export=download&id=${encodeURIComponent(f.id)}`,
-          })),
-        });
+        // Vídeos soltos nunca formam carrossel: cada um vira o seu próprio post.
+        for (const v of directFiles.filter((f) => isVideoFileName(f.title))) {
+          lotes.push(buildVideoLote(pasta, sub, v));
+        }
+        const images = directFiles.filter((f) => !isVideoFileName(f.title));
+        if (images.length > 0) {
+          lotes.push({
+            pastaClienteId: pasta.id,
+            pastaClienteNome: pasta.nome,
+            loteNome: `${pasta.nome} - ${sub.title}`,
+            categoria: images.length > 1 ? '02 Carrossel' : '01 Post unico',
+            pastaUrl: sub.href || `https://drive.google.com/drive/folders/${sub.id}`,
+            arquivos: images.map((f) => ({
+              driveFileId: f.id,
+              nome: f.title,
+              mimeType: mimeTypeFromFileName(f.title),
+              viewUrl: `https://drive.google.com/thumbnail?id=${encodeURIComponent(f.id)}&sz=w1200`,
+              thumbnailUrl: `https://drive.google.com/thumbnail?id=${encodeURIComponent(f.id)}&sz=w1200`,
+              downloadUrl: `https://drive.google.com/uc?export=download&id=${encodeURIComponent(f.id)}`,
+            })),
+          });
+        }
       }
     }
   }
@@ -1354,9 +1442,8 @@ export function requireWebhookOrUserAuth(req: AuthenticatedRequest, res: Respons
     token = customHeaderToken.trim();
   }
 
-  const isValidSecret =
-    token === 'ato_webhook_sync_token_884422' ||
-    (WEBHOOK_SECRET_TOKEN && token === WEBHOOK_SECRET_TOKEN);
+  // Somente o segredo configurado no ambiente é aceito (nenhum valor fixo no código).
+  const isValidSecret = Boolean(WEBHOOK_SECRET_TOKEN) && token === WEBHOOK_SECRET_TOKEN;
 
   if (isValidSecret) {
     req.user = {
@@ -1379,7 +1466,7 @@ export function requireWebhookOrUserAuth(req: AuthenticatedRequest, res: Respons
 
   return res.status(401).json({
     sucesso: false,
-    error: 'Acesso não autorizado: O header "Authorization" deve conter "Bearer ato_webhook_sync_token_884422".',
+    error: 'Acesso não autorizado: O header "Authorization" deve conter "Bearer <WEBHOOK_SECRET_TOKEN>".',
   });
 }
 
@@ -1569,7 +1656,7 @@ app.get('/api/auth/me', requireAuth, async (req: AuthenticatedRequest, res: Resp
       tenant = await getInstagramAccountByIdOrUser(user.tenantId).catch(() => null) || undefined;
     }
 
-    // Se o token JWT válido veio do callback de produção (ato-social-hub.ai.studio) via popup postMessage,
+    // Se o token JWT válido veio do callback de produção (socialhub.atodev.com.br) via popup postMessage,
     // garante que a conta exista no .data/database.json local
     if (!tenant && user.instagramUsername) {
       const cleanUser = user.instagramUsername.replace(/^@/, '').trim();
@@ -1655,14 +1742,8 @@ app.post('/api/auth/instagram/sync-session', requireAuth, async (req: Authentica
   } | null = null;
 
   if (syncTicket) {
-    try {
-      const decoded = jwt.verify(syncTicket, JWT_SECRET) as any;
-      if (decoded && decoded.purpose === 'instagram_sync_ticket') {
-        ticketPayload = decoded;
-      }
-    } catch {
-      // ticket expirado ou assinado com outra chave
-    }
+    // Ticket de uso único: consumido aqui, não pode ser reaproveitado.
+    ticketPayload = consumeSyncTicket(syncTicket) as any;
   }
 
   const rawUsername = String(
@@ -1830,7 +1911,69 @@ app.get('/api/debug/state', (_req: Request, res: Response) => {
 });
 
 // Controle de State OAuth emitido e proteção contra Replay/CSRF
-const consumedOAuthStateNonces = new Set<string>();
+// Serialização segura de JSON dentro de <script>: impede que "</script>" em nomes feche o bloco (XSS).
+function safeJsonForHtml(value: unknown): string {
+  return JSON.stringify(value ?? null)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .split(String.fromCharCode(0x2028)).join('\\u2028')
+    .split(String.fromCharCode(0x2029)).join('\\u2029');
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '').replace(/[&<>"']/g, (c) => {
+    const map: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+    return map[c];
+  });
+}
+
+// Origem exata do app: o postMessage só é entregue a ela (nunca '*').
+function getAppOrigin(req: Request): string {
+  const base = String(process.env.APP_URL || process.env.APP_BASE_URL || '').trim();
+  try {
+    if (base) return new URL(base).origin;
+  } catch {
+    // URL inválida: cai no host da requisição
+  }
+  return `${req.protocol}://${req.get('host') || ''}`;
+}
+
+// Tickets de sincronização: identificador aleatório, uso único, válido por 10 minutos, guardado no servidor.
+type SyncTicketPayload = Record<string, any>;
+const syncTicketStore = new Map<string, { payload: SyncTicketPayload; expiresAt: number }>();
+
+function issueSyncTicket(payload: SyncTicketPayload): string {
+  const now = Date.now();
+  for (const [id, entry] of syncTicketStore) {
+    if (entry.expiresAt < now) syncTicketStore.delete(id);
+  }
+  const id = nodeCrypto.randomBytes(32).toString('base64url');
+  syncTicketStore.set(id, { payload, expiresAt: now + 10 * 60 * 1000 });
+  return id;
+}
+
+function consumeSyncTicket(id: string): SyncTicketPayload | null {
+  const entry = syncTicketStore.get(id);
+  syncTicketStore.delete(id);
+  if (!entry || entry.expiresAt < Date.now()) return null;
+  return entry.payload;
+}
+
+// Armazena nonces e códigos já usados (valor = momento do uso) por 15 minutos, para impedir reuso.
+const consumedOAuthStateNonces = new Map<string, number>();
+const consumedOAuthCodes = new Map<string, number>();
+const OAUTH_REPLAY_WINDOW_MS = 15 * 60 * 1000;
+
+function markOAuthValueUsed(store: Map<string, number>, value: string): boolean {
+  const now = Date.now();
+  for (const [k, usedAt] of store) {
+    if (now - usedAt > OAUTH_REPLAY_WINDOW_MS) store.delete(k);
+  }
+  if (store.has(value)) return false;
+  store.set(value, now);
+  return true;
+}
 const issuedOAuthStates = new Map<
   string,
   {
@@ -1959,13 +2102,14 @@ function renderOAuthErrorHtmlPage(userMessage: string, reasonCode: string, step:
   <script>
     const errorPayload = {
       type: 'INSTAGRAM_AUTH_ERROR',
-      message: ${JSON.stringify(userMessage || IG_USER_MSG_TEMPORARY_ERROR)},
-      reasonCode: ${JSON.stringify(reasonCode || 'TEMPORARY_TECHNICAL_ERROR')},
-      step: ${JSON.stringify(step || 'CALLBACK_ERROR')}
+      message: ${safeJsonForHtml(userMessage || IG_USER_MSG_TEMPORARY_ERROR)},
+      reasonCode: ${safeJsonForHtml(reasonCode || 'TEMPORARY_TECHNICAL_ERROR')},
+      step: ${safeJsonForHtml(step || 'CALLBACK_ERROR')}
     };
     if (window.opener && !window.opener.closed) {
       try {
-        window.opener.postMessage(errorPayload, '*');
+        // Origem da própria página (é o domínio do app): o opener só recebe se for da mesma origem.
+        window.opener.postMessage(errorPayload, window.location.origin);
       } catch (e) {}
     }
     function fecharJanela() {
@@ -2004,15 +2148,51 @@ function respondOAuthCallbackError(
 }
 
 // C. Obter URL Oficial de Autorização do Instagram OAuth 2.0 (API do Instagram com Login do Instagram)
+/**
+ * Credenciais do app conforme o fluxo escolhido:
+ * - instagram_login: app antigo (conta pessoal), variáveis INSTAGRAM_LEGACY_APP_ID / INSTAGRAM_LEGACY_APP_SECRET
+ * - unified: app da empresa com login unificado, variáveis INSTAGRAM_APP_ID / INSTAGRAM_APP_SECRET
+ */
+function getOAuthAppCredentials(mode: IgLoginMode): { clientId: string; clientSecret: string } {
+  if (mode === 'instagram_login') {
+    return {
+      clientId: sanitizeEnvValue(process.env.INSTAGRAM_LEGACY_APP_ID) || '1638364467693255',
+      clientSecret: sanitizeEnvValue(process.env.INSTAGRAM_LEGACY_APP_SECRET),
+    };
+  }
+  const env = getEnv();
+  return { clientId: env.INSTAGRAM_APP_ID, clientSecret: env.INSTAGRAM_APP_SECRET };
+}
+
+/** Lê o fluxo gravado no state assinado (padrão: login unificado). */
+function readLoginModeFromState(state: unknown, secret: string): IgLoginMode {
+  if (typeof state !== 'string' || !state.trim()) return 'unified';
+  try {
+    const decoded = jwt.verify(state.trim(), secret) as { loginMode?: string };
+    return decoded.loginMode === 'instagram_login' ? 'instagram_login' : 'unified';
+  } catch {
+    return 'unified';
+  }
+}
+
 app.get('/api/auth/instagram/url', (req: Request, res: Response) => {
   loadDatabaseFromDisk();
-  const { INSTAGRAM_APP_ID: clientId, INSTAGRAM_APP_SECRET: clientSecret, JWT_SECRET } = getEnv();
+  // Somente o app da empresa (login unificado) é usado para conectar contas.
+  const loginMode: IgLoginMode = 'unified';
+  const { JWT_SECRET } = getEnv();
+  const { clientId, clientSecret } = getOAuthAppCredentials(loginMode);
   const effectiveRedirectUri = getEffectiveInstagramRedirectUri();
 
   if (!clientId || isPlaceholderOrEmpty(clientId)) {
     return res.status(500).json({
       error: 'Configuração inválida: INSTAGRAM_APP_ID ausente ou contém placeholder.',
       redirectUri: effectiveRedirectUri,
+    });
+  }
+
+  if (!effectiveRedirectUri) {
+    return res.status(500).json({
+      error: 'Configuração inválida: defina INSTAGRAM_REDIRECT_URI (https) ou APP_URL no ambiente.',
     });
   }
 
@@ -2097,6 +2277,7 @@ app.get('/api/auth/instagram/url', (req: Request, res: Response) => {
       role: authenticatedRole,
       preferredTenantId,
       driveFolderName: requestedDriveFolderName,
+      loginMode,
     },
     JWT_SECRET,
     { expiresIn: '15m' }
@@ -2112,7 +2293,8 @@ app.get('/api/auth/instagram/url', (req: Request, res: Response) => {
     driveFolderName: requestedDriveFolderName,
   });
 
-  const baseAuthUrl = `https://www.instagram.com/oauth/authorize?force_reauth=true&client_id=${clientId}&redirect_uri=${effectiveRedirectUri}&response_type=code&scope=instagram_business_basic,instagram_business_content_publish`;
+  // Login unificado: as permissões vêm da configuração (config_id), não do parâmetro scope.
+  const baseAuthUrl = `${IG_OAUTH_DIALOG_URL}?client_id=${encodeURIComponent(clientId)}&config_id=${encodeURIComponent(getInstagramLoginConfigId())}&redirect_uri=${encodeURIComponent(effectiveRedirectUri)}&response_type=code&display=popup&prompt=login`;
   const url_completa = `${baseAuthUrl}&state=${encodeURIComponent(signedState)}`;
 
   console.log('[OAuth Authorize Redirect URI]:', effectiveRedirectUri);
@@ -2120,6 +2302,7 @@ app.get('/api/auth/instagram/url', (req: Request, res: Response) => {
   return res.json({
     url: url_completa,
     state: signedState,
+    loginMode,
     appId: clientId,
     redirectUri: effectiveRedirectUri,
     requiredScopes: REQUIRED_IG_SCOPES,
@@ -2129,7 +2312,7 @@ app.get('/api/auth/instagram/url', (req: Request, res: Response) => {
 // C1. Status de Prontidão para Meta App Review & Advanced Access (Seção 3 e 6)
 app.get('/api/instagram/app-review-status', (_req: Request, res: Response) => {
   const { INSTAGRAM_APP_ID, APP_URL } = getEnv();
-  const baseUrl = (APP_URL || 'https://ato-social-hub.ai.studio').replace(/\/+$/, '');
+  const baseUrl = (APP_URL || '').replace(/\/+$/, '');
   const advancedAccessApproved =
     String(process.env.META_ADVANCED_ACCESS_APPROVED || 'false').toLowerCase() === 'true';
 
@@ -2211,7 +2394,7 @@ app.get('/api/instagram/oauth-diagnostics', (_req: Request, res: Response) => {
 
   return res.json({
     generatedAt: new Date().toISOString(),
-    instagramLoginAppId: INSTAGRAM_APP_ID || '1638364467693255',
+    instagramLoginAppId: INSTAGRAM_APP_ID || '',
     graphApiHost: 'https://graph.instagram.com',
     graphApiVersion: 'v21.0',
     appAccessLevel: advancedAccessApproved ? 'ADVANCED_ACCESS' : 'STANDARD_ACCESS',
@@ -2223,7 +2406,7 @@ app.get('/api/instagram/oauth-diagnostics', (_req: Request, res: Response) => {
         instagramUserId: adminWorkingAccount?.instagramUserId || '17841449218493021',
         accountType: adminWorkingAccount?.account_type || 'BUSINESS (Profissional)',
         roleInMetaApp: 'Administrador / Desenvolvedor / Testador autorizado no App Meta',
-        instagramLoginAppId: INSTAGRAM_APP_ID || '1638364467693255',
+        instagramLoginAppId: INSTAGRAM_APP_ID || '',
         requestedPermissions: REQUIRED_IG_SCOPES,
         grantedPermissions: adminWorkingAccount?.grantedScopes || REQUIRED_IG_SCOPES,
         appAccessLevelRequired: 'Standard Access é suficiente para contas com função ativa no App Meta',
@@ -2248,7 +2431,7 @@ app.get('/api/instagram/oauth-diagnostics', (_req: Request, res: Response) => {
         accountType:
           'PERSONAL (Conta Pessoal sem nó IGUser no Graph API) OU Conta Profissional Externa sem função ativa no App Meta sob Standard Access',
         roleInMetaApp: 'Sem função no App Meta (ou convite de Instagram Tester pendente de aceite)',
-        instagramLoginAppId: INSTAGRAM_APP_ID || '1638364467693255',
+        instagramLoginAppId: INSTAGRAM_APP_ID || '',
         requestedPermissions: REQUIRED_IG_SCOPES,
         grantedPermissions: REQUIRED_IG_SCOPES,
         appAccessLevelRequired:
@@ -2292,7 +2475,7 @@ app.post(
 
     const confirmationCode = `del_${Date.now()}`;
     const currentOrigin =
-      process.env.APP_URL || `${req.protocol}://${req.get('host') || 'ato-social-hub.ai.studio'}`;
+      process.env.APP_URL || `${req.protocol}://${req.get('host') || ''}`;
     const statusUrl = `${currentOrigin}/exclusao-de-dados?code=${confirmationCode}`;
 
     if (rawIdentifier) {
@@ -2346,11 +2529,11 @@ app.get('/api/version', (_req: Request, res: Response) => {
     graph_api_version: 'v21.0',
     instagram_app_id: INSTAGRAM_APP_ID || null,
     meta_access_mode: advancedAccessApproved ? 'ADVANCED_ACCESS' : 'STANDARD_ACCESS',
-    redirect_uri: REDIRECT_URI,
+    redirect_uri: getEffectiveInstagramRedirectUri(),
     redirect_comparacao: {
       authorize_redirect_uri: lastAuthorizedRedirectUri,
-      post_redirect_uri: REDIRECT_URI,
-      iguais: lastAuthorizedRedirectUri === REDIRECT_URI,
+      post_redirect_uri: getEffectiveInstagramRedirectUri(),
+      iguais: lastAuthorizedRedirectUri === getEffectiveInstagramRedirectUri(),
     },
     configuracao_credenciais: {
       app_id_presente: secretStatus.appIdPresent,
@@ -2364,11 +2547,9 @@ app.get('/api/version', (_req: Request, res: Response) => {
 
 // D. Rota Única de Callback OAuth Oficial do Instagram (Auditada e Sem Bypass)
 app.get('/api/auth/instagram/callback', async (req: Request, res: Response) => {
-  const {
-    INSTAGRAM_APP_ID: clientId,
-    INSTAGRAM_APP_SECRET: clientSecret,
-    JWT_SECRET,
-  } = getEnv();
+  const { JWT_SECRET } = getEnv();
+  const cbLoginMode: IgLoginMode = readLoginModeFromState(req.query.state, JWT_SECRET);
+  const { clientId, clientSecret } = getOAuthAppCredentials(cbLoginMode);
   const encKey = getTokenEncryptionKey();
   const fetchFn = getInstagramFetch();
 
@@ -2406,6 +2587,18 @@ app.get('/api/auth/instagram/callback', async (req: Request, res: Response) => {
   let preferredTenantIdFromState: string | null = null;
   let driveFolderNameFromState: string | null = null;
 
+  // state é obrigatório: sem ele não há como provar que o fluxo começou neste navegador (CSRF de login).
+  if (typeof req.query.state !== 'string' || req.query.state.trim() === '') {
+    return respondOAuthCallbackError(req, res, 400, {
+      versao_codigo: 'v3_nova',
+      versao: 'v4_limpa_sem_callback_text',
+      falha_no_passo: 'VALIDACAO_STATE_OAUTH',
+      reason_code: 'TEMPORARY_TECHNICAL_ERROR',
+      user_message: IG_USER_MSG_TEMPORARY_ERROR,
+      erro: 'Parâmetro state ausente. Inicie a conexão novamente pelo painel.',
+    });
+  }
+
   if (typeof req.query.state === 'string' && req.query.state.trim() !== '') {
     try {
       const decodedState = jwt.verify(req.query.state.trim(), JWT_SECRET) as {
@@ -2430,18 +2623,15 @@ app.get('/api/auth/instagram/callback', async (req: Request, res: Response) => {
       }
 
       // Proteção contra Replay: cada state só pode ser utilizado uma única vez
-      if (decodedState.nonce) {
-        if (consumedOAuthStateNonces.has(decodedState.nonce)) {
-          return respondOAuthCallbackError(req, res, 400, {
-            versao_codigo: 'v3_nova',
-            versao: 'v4_limpa_sem_callback_text',
-            falha_no_passo: 'VALIDACAO_STATE_OAUTH',
-            reason_code: 'TEMPORARY_TECHNICAL_ERROR',
-            user_message: IG_USER_MSG_TEMPORARY_ERROR,
-            erro: 'Parâmetro state já utilizado anteriormente (proteção contra replay OAuth).',
-          });
-        }
-        consumedOAuthStateNonces.add(decodedState.nonce);
+      if (!decodedState.nonce || !markOAuthValueUsed(consumedOAuthStateNonces, decodedState.nonce)) {
+        return respondOAuthCallbackError(req, res, 400, {
+          versao_codigo: 'v3_nova',
+          versao: 'v4_limpa_sem_callback_text',
+          falha_no_passo: 'VALIDACAO_STATE_OAUTH',
+          reason_code: 'TEMPORARY_TECHNICAL_ERROR',
+          user_message: IG_USER_MSG_TEMPORARY_ERROR,
+          erro: 'Parâmetro state ausente ou já utilizado (proteção contra CSRF e replay OAuth).',
+        });
       }
 
       // Valida correspondência entre redirect_uri da autorização iniciada e o callback
@@ -2477,6 +2667,22 @@ app.get('/api/auth/instagram/callback', async (req: Request, res: Response) => {
         erro: 'Parâmetro state expirado ou assinatura inválida.',
       });
     }
+  }
+
+  // Código de autorização da Meta é de uso único: impede reaproveitar o mesmo código.
+  if (
+    typeof req.query.code === 'string' &&
+    req.query.code.trim() !== '' &&
+    !markOAuthValueUsed(consumedOAuthCodes, req.query.code.trim())
+  ) {
+    return respondOAuthCallbackError(req, res, 400, {
+      versao_codigo: 'v3_nova',
+      versao: 'v4_limpa_sem_callback_text',
+      falha_no_passo: 'VALIDACAO_CODIGO_OAUTH',
+      reason_code: 'TEMPORARY_TECHNICAL_ERROR',
+      user_message: IG_USER_MSG_TEMPORARY_ERROR,
+      erro: 'Código de autorização já utilizado. Inicie a conexão novamente.',
+    });
   }
 
   if (!req.query.code || typeof req.query.code !== 'string') {
@@ -2538,36 +2744,57 @@ app.get('/api/auth/instagram/callback', async (req: Request, res: Response) => {
   }
 
   try {
-    // Etapa 1 — POST (application/x-www-form-urlencoded) para https://api.instagram.com/oauth/access_token
     const cleanCode = String(req.query.code || '').replace(/#_$/, '').trim();
-
-    const formData = new URLSearchParams();
-    formData.append('client_id', clientId);
-    formData.append('client_secret', clientSecret);
-    formData.append('grant_type', 'authorization_code');
-    formData.append('redirect_uri', postRedirectUri);
-    formData.append('code', cleanCode);
-
-    const tokenRes = await fetchFn('https://api.instagram.com/oauth/access_token', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: formData.toString(),
-    });
-
-    const rawTokenText = await tokenRes.text().catch(() => '');
-    const exactUserIdMatch = rawTokenText.match(/"user_id"\s*:\s*"?(\d+)"?/);
-    const exactUserIdFromText = exactUserIdMatch ? exactUserIdMatch[1] : '';
-
+    let tokenRes: { ok: boolean; status: number };
+    let exactUserIdFromText = '';
     let tokenData: any = {};
-    try {
-      tokenData = rawTokenText ? JSON.parse(rawTokenText) : {};
-    } catch {
-      tokenData = {
-        error_type: 'InvalidJSONResponse',
-        error_message: rawTokenText || 'Empty response',
-      };
+    let unifiedExpiresInSeconds = 60 * 24 * 60 * 60; // 60 dias, padrão quando o retorno não informa expires_in
+
+    if (cbLoginMode === 'unified') {
+      // Etapa 1 — Login unificado: GET https://graph.facebook.com/v27.0/oauth/access_token (client_secret só no servidor)
+      const unifiedExchange = await exchangeUnifiedLoginCode({
+        code: cleanCode,
+        clientId,
+        clientSecret,
+        redirectUri: postRedirectUri,
+      });
+      tokenRes = { ok: unifiedExchange.ok, status: unifiedExchange.status };
+      unifiedExpiresInSeconds = unifiedExchange.expiresInSeconds;
+      // No login unificado o user_id não vem no token: ele é obtido em /me/assigned_instagram_accounts.
+      tokenData = unifiedExchange.raw && typeof unifiedExchange.raw === 'object' ? unifiedExchange.raw : {};
+      if (!unifiedExchange.ok && !tokenData.error) {
+        tokenData = { ...tokenData, error_type: 'OAuthException', error_message: 'Falha na troca do código' };
+      }
+    } else {
+      // Etapa 1 (login do Instagram antigo) — POST https://api.instagram.com/oauth/access_token
+      const formData = new URLSearchParams();
+      formData.append('client_id', clientId);
+      formData.append('client_secret', clientSecret);
+      formData.append('grant_type', 'authorization_code');
+      formData.append('redirect_uri', postRedirectUri);
+      formData.append('code', cleanCode);
+
+      const legacyTokenRes = await fetchFn('https://api.instagram.com/oauth/access_token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formData.toString(),
+      });
+      tokenRes = legacyTokenRes;
+
+      const rawTokenText = await legacyTokenRes.text().catch(() => '');
+      const exactUserIdMatch = rawTokenText.match(/"user_id"\s*:\s*"?(\d+)"?/);
+      exactUserIdFromText = exactUserIdMatch ? exactUserIdMatch[1] : '';
+
+      try {
+        tokenData = rawTokenText ? JSON.parse(rawTokenText) : {};
+      } catch {
+        tokenData = {
+          error_type: 'InvalidJSONResponse',
+          error_message: rawTokenText || 'Empty response',
+        };
+      }
     }
 
     const rawAccessToken =
@@ -2684,22 +2911,54 @@ app.get('/api/auth/instagram/callback', async (req: Request, res: Response) => {
     const grantedScopes =
       rawPermissions.length > 0 ? rawPermissions : [...REQUIRED_IG_SCOPES];
 
-    // Etapa 1.5 — Conversão do token de curta duração em token de longa duração (60 dias)
-    const longLivedExchange = await exchangeShortForLongLivedInstagramToken({
-      shortLivedToken,
-      clientSecret,
-    });
+    // Etapa 1.5 — Token de longa duração.
+    // Login unificado: o token de usuário de sistema já vem com validade definida pela configuração (sem ig_exchange_token).
+    // Login do Instagram antigo: troca ig_exchange_token para token de 60 dias.
+    const longLivedExchange: {
+      ok: boolean;
+      accessToken: string;
+      tokenType: string;
+      expiresInSeconds: number;
+      tokenIssuedAt: string;
+      tokenExpiresAt: string;
+      errorMessage?: string;
+    } =
+      cbLoginMode === 'unified'
+        ? {
+            ok: true,
+            accessToken: shortLivedToken,
+            tokenType: UNIFIED_TOKEN_TYPE,
+            expiresInSeconds: unifiedExpiresInSeconds,
+            tokenIssuedAt: new Date().toISOString(),
+            tokenExpiresAt: new Date(Date.now() + unifiedExpiresInSeconds * 1000).toISOString(),
+          }
+        : await exchangeShortForLongLivedInstagramToken({ shortLivedToken, clientSecret });
     const finalAccessToken = longLivedExchange.accessToken;
     const encryptedAccessToken = encryptInstagramToken(finalAccessToken, encKey || JWT_SECRET);
 
-    // Etapa 2A — Consulta mínima de perfil (Seção 2):
-    // GET https://graph.instagram.com/v21.0/me?fields=user_id,username
-    const minimalEndpoint = 'https://graph.instagram.com/v21.0/me';
-    const minimalFields = 'user_id,username';
-    const minimalUrl = `${minimalEndpoint}?fields=${minimalFields}&access_token=${encodeURIComponent(finalAccessToken)}`;
-
-    const minProfileRes = await fetchFn(minimalUrl, { method: 'GET' });
-    const minRawText = await minProfileRes.text().catch(() => '');
+    // Etapa 2A — Descoberta da conta profissional.
+    // Login unificado: GET https://graph.facebook.com/v27.0/me/assigned_instagram_accounts?fields=id,username
+    // Login do Instagram antigo: GET https://graph.instagram.com/v21.0/me?fields=user_id,username
+    let minimalEndpoint: string;
+    let minimalFields: string;
+    let selectedAccount: { id: string; username: string } | undefined;
+    let minProfileRes: { ok: boolean; status: number };
+    let minRawText: string;
+    if (cbLoginMode === 'unified') {
+      minimalEndpoint = `${igGraphBase('unified')}/me/assigned_instagram_accounts`;
+      minimalFields = 'id,username';
+      const assigned = await fetchAssignedInstagramAccounts(finalAccessToken);
+      selectedAccount = assigned.accounts[0];
+      minProfileRes = { ok: assigned.ok && Boolean(selectedAccount), status: assigned.status || 400 };
+      minRawText = JSON.stringify(assigned.raw ?? {});
+    } else {
+      minimalEndpoint = 'https://graph.instagram.com/v21.0/me';
+      minimalFields = 'user_id,username';
+      const minimalUrl = `${minimalEndpoint}?fields=${minimalFields}&access_token=${encodeURIComponent(finalAccessToken)}`;
+      const legacyMinRes = await fetchFn(minimalUrl, { method: 'GET' });
+      minProfileRes = { ok: legacyMinRes.ok, status: legacyMinRes.status };
+      minRawText = await legacyMinRes.text().catch(() => '');
+    }
     const minExactUserId = minRawText.match(/"user_id"\s*:\s*"?(\d+)"?/)?.[1];
     const minExactId = minRawText.match(/"id"\s*:\s*"?(\d+)"?/)?.[1];
 
@@ -2713,6 +2972,13 @@ app.get('/api/auth/instagram/callback', async (req: Request, res: Response) => {
     }
     if (minExactUserId) minProfileData.user_id = minExactUserId;
     if (minExactId) minProfileData.id = minExactId;
+    if (selectedAccount) {
+      minProfileData = {
+        id: selectedAccount.id,
+        user_id: selectedAccount.id,
+        username: selectedAccount.username,
+      };
+    }
 
     if (!minProfileRes.ok || minProfileData.error || minProfileData.error_type || !minProfileData.username) {
       const fbtraceId =
@@ -2788,8 +3054,12 @@ app.get('/api/auth/instagram/callback', async (req: Request, res: Response) => {
     }
 
     // Etapa 2B — Consulta progressiva de campos adicionais (id, user_id, username, account_type)
-    const progressiveFields = 'id,user_id,username,account_type';
-    const progressiveUrl = `${minimalEndpoint}?fields=${progressiveFields}&access_token=${encodeURIComponent(finalAccessToken)}`;
+    const progressiveFields =
+      cbLoginMode === 'unified' ? 'id,username,account_type' : 'id,user_id,username,account_type';
+    const progressiveUrl =
+      cbLoginMode === 'unified'
+        ? `${igGraphBase('unified')}/${encodeURIComponent(selectedAccount?.id || '')}?fields=${progressiveFields}&access_token=${encodeURIComponent(finalAccessToken)}`
+        : `${minimalEndpoint}?fields=${progressiveFields}&access_token=${encodeURIComponent(finalAccessToken)}`;
     let profileData: any = { ...minProfileData };
 
     try {
@@ -3069,25 +3339,21 @@ app.get('/api/auth/instagram/callback', async (req: Request, res: Response) => {
     };
 
     // Ticket opaco assinado pelo servidor (10 min) para sincronização cross-domain sem expor encryptedAccessToken no objeto tenant/user
-    const syncTicket = jwt.sign(
-      {
-        purpose: 'instagram_sync_ticket',
-        tenantId: targetTenant!.id,
-        username: targetTenant!.username,
-        nome: targetTenant!.nome,
-        instagramUserId: targetTenant!.instagramUserId,
-        accountType: targetTenant!.account_type,
-        avatarUrl: targetTenant!.avatarUrl,
-        encryptedAccessToken,
-        tokenIssuedAt: targetTenant!.tokenIssuedAt,
-        tokenExpiresAt: targetTenant!.tokenExpiresAt,
-        grantedScopes: targetTenant!.grantedScopes,
-        driveFolderName: targetTenant!.driveFolderName || null,
-        driveFolderId: targetTenant!.driveFolderId || null,
-      },
-      JWT_SECRET,
-      { expiresIn: '10m' }
-    );
+    // O token criptografado fica somente no servidor; o navegador recebe apenas um ticket opaco de uso único.
+    const syncTicket = issueSyncTicket({
+      tenantId: targetTenant!.id,
+      username: targetTenant!.username,
+      nome: targetTenant!.nome,
+      instagramUserId: targetTenant!.instagramUserId,
+      accountType: targetTenant!.account_type,
+      avatarUrl: targetTenant!.avatarUrl,
+      encryptedAccessToken,
+      tokenIssuedAt: targetTenant!.tokenIssuedAt,
+      tokenExpiresAt: targetTenant!.tokenExpiresAt,
+      grantedScopes: targetTenant!.grantedScopes,
+      driveFolderName: targetTenant!.driveFolderName || null,
+      driveFolderId: targetTenant!.driveFolderId || null,
+    });
 
     const isReconnectedByAuthenticatedSession = Boolean(
       verifiedStateAdminId || verifiedStateRole === 'ADMIN' || verifiedStateRole === 'TENANT'
@@ -3162,40 +3428,41 @@ app.get('/api/auth/instagram/callback', async (req: Request, res: Response) => {
       <div class="card">
         <div class="logo">ATO<span>.</span></div>
         <h2>Conta Conectada</h2>
-        <div class="badge">@${targetTenant!.username}</div>
+        <div class="badge">@${escapeHtml(targetTenant!.username)}</div>
         <p>Autenticação oficial concluída e token longo salvo no PostgreSQL. Redirecionando para o painel...</p>
       </div>
       <script>
-        const isReconnectedByAdmin = ${JSON.stringify(isReconnectedByAuthenticatedSession)};
+        const isReconnectedByAdmin = ${safeJsonForHtml(isReconnectedByAuthenticatedSession)};
+        const appOrigin = ${safeJsonForHtml(getAppOrigin(req))};
+        // O token de sessão NÃO é enviado ao opener: o popup grava no localStorage do mesmo domínio.
         const authPayload = {
           type: 'INSTAGRAM_AUTH_SUCCESS',
           reconnectedByAdmin: isReconnectedByAdmin,
-          token: ${JSON.stringify(token)},
-          user: ${JSON.stringify(userProfile)},
-          tenant: ${JSON.stringify(safeTenantPayload)},
-          syncTicket: ${JSON.stringify(syncTicket)}
+          user: ${safeJsonForHtml(userProfile)},
+          tenant: ${safeJsonForHtml(safeTenantPayload)},
+          syncTicket: ${safeJsonForHtml(syncTicket)}
         };
         if (!isReconnectedByAdmin) {
           try {
             localStorage.clear();
             sessionStorage.clear();
-            localStorage.setItem('ato_social_jwt_token', authPayload.token);
+            localStorage.setItem('ato_social_jwt_token', ${safeJsonForHtml(token)});
             localStorage.setItem('ato_social_user_data', JSON.stringify(authPayload.user));
           } catch (err) {}
         }
+        // Sem token na URL: o histórico e os logs do servidor não registram a sessão.
+        const destino = isReconnectedByAdmin
+          ? '/?reconnected=' + encodeURIComponent(${safeJsonForHtml(targetTenant!.username)})
+          : '/';
         if (window.opener && !window.opener.closed) {
           try {
-            window.opener.postMessage(authPayload, '*');
+            window.opener.postMessage(authPayload, appOrigin);
             setTimeout(() => window.close(), 500);
           } catch (e) {
-            window.location.href = isReconnectedByAdmin
-              ? '/?reconnected=' + encodeURIComponent(${JSON.stringify(targetTenant!.username)})
-              : '/?token=' + encodeURIComponent(${JSON.stringify(token)});
+            window.location.href = destino;
           }
         } else {
-          window.location.href = isReconnectedByAdmin
-            ? '/?reconnected=' + encodeURIComponent(${JSON.stringify(targetTenant!.username)})
-            : '/?token=' + encodeURIComponent(${JSON.stringify(token)});
+          window.location.href = destino;
         }
       </script>
     </body>
@@ -4057,6 +4324,14 @@ app.get('/api/posts', requireAuth, async (req: AuthenticatedRequest, res: Respon
     return p;
   });
 
+  // Oculta por completo o post que tenha qualquer mídia indisponível (arquivo inexistente ou corrompido
+  // no Drive): um carrossel com um slide quebrado não pode ser postado, então some inteiro.
+  if (unavailableMediaIds.size > 0) {
+    filteredPosts = filteredPosts.filter(
+      (p) => !(p.items || []).some((item) => unavailableMediaIds.has(String(item.driveFileId || '')))
+    );
+  }
+
   // Filtro de isolamento de visão:
   // - TENANT (cliente): esconde totalmente mídias que o cliente apagou/ocultou
   // - ADMIN: MANTÉM todas as mídias visíveis, marcadas com a etiqueta/badge "Apagado pelo Cliente"
@@ -4285,6 +4560,38 @@ app.post('/api/posts/upload', requireAuth, async (req: AuthenticatedRequest, res
 // ----------------------------------------------------
 // 4. GOOGLE APPS SCRIPT WEBHOOK PÚBLICO (POST /api/webhooks/drive-sync)
 // ----------------------------------------------------
+/** MIME pela extensão, usado quando o Apps Script não envia o tipo do arquivo. */
+function inferMimeFromFileName(nome: string): string {
+  const ext = (nome.split('.').pop() || '').toLowerCase();
+  const mapa: Record<string, string> = {
+    mp4: 'video/mp4',
+    m4v: 'video/x-m4v',
+    mov: 'video/quicktime',
+    webm: 'video/webm',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    webp: 'image/webp',
+    gif: 'image/gif',
+    png: 'image/png',
+  };
+  return mapa[ext] || 'image/png';
+}
+
+/**
+ * MIME final do item. Vídeo é reconhecido pelo nome (.mp4, .mov...) ou pelo lote da pasta Vídeos,
+ * mesmo que o Apps Script envie um MIME genérico ou de imagem.
+ */
+function resolveItemMimeType(mimeRecebido: unknown, nome: string, loteEhVideo: boolean): string {
+  const mime = mimeRecebido ? String(mimeRecebido).toLowerCase() : '';
+  const ehVideoPeloNome = /\.(mp4|mov|webm|m4v)$/i.test(nome);
+  if (ehVideoPeloNome || loteEhVideo) {
+    if (mime.startsWith('video/')) return mime;
+    const inferido = inferMimeFromFileName(nome);
+    return inferido.startsWith('video/') ? inferido : 'video/mp4';
+  }
+  return mime || inferMimeFromFileName(nome);
+}
+
 app.post('/api/webhooks/drive-sync', requireWebhookOrUserAuth, (req: AuthenticatedRequest, res: Response) => {
   // 1. Log obrigatório logo no início da rota para auditoria completa do payload recebido
   console.log("PAYLOAD RECEBIDO:", JSON.stringify(req.body, null, 2));
@@ -4866,23 +5173,45 @@ async function fetchDriveThumbnail(
     }
     // 2) Não está no banco: busca no Drive abaixo e grava para as próximas vezes.
 
+    // A miniatura do Drive às vezes responde 404 para arquivos que existem (o download original funciona),
+    // por isso o download original entra como última tentativa.
     const candidates = [
       `https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w${width}`,
       `https://lh3.googleusercontent.com/d/${encodeURIComponent(fileId)}=w${width}`,
+      `https://drive.google.com/uc?export=download&id=${encodeURIComponent(fileId)}`,
     ];
+    // Só consideramos o arquivo inexistente se TODAS as fontes responderem "não encontrado" (400/404/410).
+    // Erros transitórios (timeout, 429, 5xx, rede) nunca ocultam a mídia.
+    let definitelyMissing = true;
+    // Arquivo que existe mas está truncado/corrompido no Drive (não abre no computador nem posta).
+    let corrupted = false;
     for (const url of candidates) {
       try {
         const resp = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(15_000) });
         const ct = resp.headers.get('content-type') || '';
+        if (!(resp.ok && ct.startsWith('image/')) && ![400, 404, 410].includes(resp.status)) {
+          definitelyMissing = false;
+        }
         if (resp.ok && ct.startsWith('image/')) {
           const original = Buffer.from(await resp.arrayBuffer());
-          if (original.length === 0) continue;
+          if (original.length === 0) {
+            definitelyMissing = false;
+            continue;
+          }
           // Converte para WebP com compressão (fica bem menor que o JPEG do Drive).
-          const optimized = await sharp(original, { failOn: 'none' })
-            .rotate()
-            .resize({ width, withoutEnlargement: true })
-            .webp({ quality: driveThumbQuality(width), effort: 4 })
-            .toBuffer();
+          // failOn 'error': decodificação estrita, para arquivo truncado não virar miniatura parcial.
+          let optimized: Buffer;
+          try {
+            optimized = await sharp(original, { failOn: 'error' })
+              .rotate()
+              .resize({ width, withoutEnlargement: true })
+              .webp({ quality: driveThumbQuality(width), effort: 4 })
+              .toBuffer();
+          } catch (decodeErr: any) {
+            corrupted = true;
+            console.warn(`[Media Thumb] ${fileId} está corrompido no Drive: ${decodeErr?.message}`);
+            break;
+          }
           driveThumbCacheSet(key, optimized, 'image/webp');
           const etag = `"${fileId}-w${width}-${optimized.length}"`;
           void saveStoredThumbnail(fileId, width, optimized, 'image/webp', etag);
@@ -4892,8 +5221,19 @@ async function fetchDriveThumbnail(
           return { buffer: optimized, contentType: 'image/webp' };
         }
       } catch (err: any) {
+        definitelyMissing = false;
         console.warn(`[Media Thumb] Falha ao buscar ${fileId} (w${width}):`, err.message);
       }
+    }
+
+    if (corrupted || definitelyMissing) {
+      unavailableMediaIds.add(fileId);
+      void markMediaUnavailableInDb(fileId).catch((err: any) =>
+        console.warn(`[Media Thumb] Falha ao marcar ${fileId} como indisponível:`, err?.message)
+      );
+      console.warn(
+        `[Media Thumb] ${fileId} ${corrupted ? 'corrompido' : 'não existe mais'} no Drive: mídia ocultada do sistema.`
+      );
     }
     return null;
   })();
@@ -4917,6 +5257,9 @@ app.get('/api/media/thumb/:rawId', async (req: Request, res: Response) => {
 
   const image = await fetchDriveThumbnail(fileId, width);
   if (!image) {
+    if (unavailableMediaIds.has(fileId)) {
+      return res.status(404).json({ error: 'Arquivo não encontrado no Drive' });
+    }
     return res.redirect(`https://drive.google.com/thumbnail?id=${encodeURIComponent(fileId)}&sz=w${width}`);
   }
 
@@ -4924,6 +5267,65 @@ app.get('/api/media/thumb/:rawId', async (req: Request, res: Response) => {
   res.setHeader('Content-Length', String(image.buffer.length));
   res.setHeader('Cache-Control', 'public, max-age=604800, immutable');
   return res.status(200).send(image.buffer);
+});
+
+/**
+ * Download do arquivo ORIGINAL pelo próprio servidor. Como vem do mesmo domínio do painel,
+ * o navegador respeita o atributo `download` e salva cada arquivo (em vez de navegar para o Drive,
+ * o que faz só o último clique de um lote sobreviver).
+ */
+app.get('/api/media/original/:rawId', async (req: Request, res: Response) => {
+  const fileId = String(req.params.rawId || '').replace(/\.(jpg|jpeg|png|webp|mp4|mov)$/i, '').trim();
+  if (!/^[A-Za-z0-9_-]{10,}$/.test(fileId)) {
+    return res.status(400).send('fileId inválido');
+  }
+  const rawName = String(req.query.name || '').trim();
+  const safeName = (rawName || fileId).replace(/[\\/:*?"<>|\r\n]+/g, '_').slice(0, 200);
+
+  const candidates = [
+    `https://drive.google.com/uc?export=download&id=${encodeURIComponent(fileId)}`,
+    `https://lh3.googleusercontent.com/d/${encodeURIComponent(fileId)}=s0`,
+  ];
+  for (const url of candidates) {
+    // Timeout só até o cabeçalho da resposta. Depois disso o arquivo pode levar o tempo que for
+    // (vídeos grandes), e um timeout no meio do corpo não pode derrubar o processo.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 30_000);
+    try {
+      const resp = await fetch(url, { redirect: 'follow', signal: controller.signal });
+      clearTimeout(timer);
+      const ct = resp.headers.get('content-type') || '';
+      if (!resp.ok || !resp.body || ct.startsWith('text/html')) {
+        controller.abort();
+        continue;
+      }
+      res.setHeader('Content-Type', ct || 'application/octet-stream');
+      const len = resp.headers.get('content-length');
+      if (len) res.setHeader('Content-Length', len);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${safeName.replace(/"/g, '')}"; filename*=UTF-8''${encodeURIComponent(safeName)}`
+      );
+      res.setHeader('Cache-Control', 'private, no-store');
+
+      const body = Readable.fromWeb(resp.body as any);
+      body.on('error', (err: any) => {
+        console.warn(`[Media Original] Erro no streaming de ${fileId}:`, err?.message);
+        if (!res.headersSent) res.status(502);
+        res.destroy();
+      });
+      // Se o cliente fechar a aba no meio, cancela a transferência do Drive.
+      res.on('close', () => {
+        if (!res.writableFinished) controller.abort();
+      });
+      body.pipe(res);
+      return;
+    } catch (err: any) {
+      clearTimeout(timer);
+      console.warn(`[Media Original] Falha ao buscar ${fileId}:`, err?.message);
+    }
+  }
+  return res.status(404).json({ error: 'Arquivo original não encontrado no Drive' });
 });
 
 // ---------------------------------------------------------------------------

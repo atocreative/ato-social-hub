@@ -97,7 +97,7 @@ export class PublicationService {
       publicBaseUrl ||
         process.env.APP_URL ||
         process.env.APP_BASE_URL ||
-        'https://ato-social-hub.ai.studio'
+        'https://socialhub.atodev.com.br'
     )
       .trim()
       .replace(/\/+$/, '');

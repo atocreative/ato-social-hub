@@ -1,5 +1,5 @@
 import React from 'react';
-import { CategoryFilter } from '../utils/postHelpers.ts';
+import { CategoryFilter, MediaFilter } from '../utils/postHelpers.ts';
 
 export type FilterTab = 'PENDENTES' | 'AGENDADOS' | 'PUBLICADOS' | 'REPROVADOS' | 'TODOS';
 
@@ -10,6 +10,8 @@ interface FilterBarProps {
   onSearchChange: (query: string) => void;
   selectedCategory: CategoryFilter;
   onCategoryChange: (category: CategoryFilter) => void;
+  selectedMedia: MediaFilter;
+  onMediaChange: (media: MediaFilter) => void;
   stats: {
     total: number;
     pendentes: number;
@@ -26,8 +28,15 @@ export const FilterBar: React.FC<FilterBarProps> = ({
   onSearchChange,
   selectedCategory,
   onCategoryChange,
+  selectedMedia,
+  onMediaChange,
   stats,
 }) => {
+  const mediaOptions: { key: MediaFilter; label: string }[] = [
+    { key: 'TODOS', label: 'Todos' },
+    { key: 'IMAGENS', label: 'Imagens' },
+    { key: 'VIDEOS', label: 'Vídeos' },
+  ];
   const tabs: { key: FilterTab; label: string; count: number }[] = [
     { key: 'PENDENTES', label: 'Pendentes', count: stats.pendentes },
     { key: 'AGENDADOS', label: 'Agendados', count: stats.agendados },
@@ -41,6 +50,7 @@ export const FilterBar: React.FC<FilterBarProps> = ({
     { key: 'Post Único', label: 'Post Único' },
     { key: 'Carrossel', label: 'Carrossel' },
     { key: 'Story', label: 'Story' },
+    { key: 'Vídeos', label: 'Vídeos' },
   ];
 
   return (
@@ -80,6 +90,29 @@ export const FilterBar: React.FC<FilterBarProps> = ({
             className="w-full bg-[#121212] border border-[#242424] focus:border-[#10B981] rounded-lg px-3 py-1.5 text-xs text-white placeholder-[#555555] outline-none transition-colors"
           />
         </div>
+      </div>
+
+      {/* Tipo de mídia ([Todos] [Imagens] [Vídeos]) */}
+      <div className="flex items-center flex-wrap gap-1.5">
+        <span className="text-[11px] text-[#8E8E93] mr-1 font-medium">Tipo:</span>
+        {mediaOptions.map((opt) => {
+          const isSelected = selectedMedia === opt.key;
+          return (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() => onMediaChange(opt.key)}
+              aria-pressed={isSelected}
+              className={`px-2.5 py-1 text-xs font-medium rounded-md border transition-colors cursor-pointer ${
+                isSelected
+                  ? 'bg-[#10B981]/15 border-[#10B981] text-[#10B981]'
+                  : 'bg-[#121212] border-[#242424] text-[#8E8E93] hover:text-white hover:border-[#333333]'
+              }`}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Category Sub-Filters ([Todos] [Post Único] [Carrossel] [Story]) */}

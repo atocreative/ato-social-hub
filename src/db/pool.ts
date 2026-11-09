@@ -57,6 +57,9 @@ let strictRequireRailwayUrl = false;
  * Sanitizes DATABASE_URL without logging or returning credentials.
  */
 export function getDatabaseUrlFromEnv(): string {
+  // `npm run dev` passa --local-db: usa o PGlite local (.data/pgdata) ignorando DATABASE_URL do .env.
+  // `npm start` não passa a flag, então continua usando a Railway normalmente.
+  if (process.argv.includes('--local-db')) return '';
   const raw = String(process.env.DATABASE_URL || '')
     .trim()
     .replace(/^['"]+|['"]+$/g, '')
@@ -234,7 +237,12 @@ async function getOrInitEmbeddedPostgres(): Promise<any> {
         initErr?.message
       );
       try {
-        fs.rmSync(LOCAL_PGDATA_DIR, { recursive: true, force: true });
+        // Não apaga dados: preserva o diretório corrompido em uma cópia de backup antes de recriar.
+        const backupDir = `${LOCAL_PGDATA_DIR}.backup-${Date.now()}`;
+        if (fs.existsSync(LOCAL_PGDATA_DIR)) {
+          fs.renameSync(LOCAL_PGDATA_DIR, backupDir);
+          console.warn('[PGlite] Diretório anterior preservado em:', backupDir);
+        }
         fs.mkdirSync(LOCAL_PGDATA_DIR, { recursive: true });
         const freshInst = new PGlite(LOCAL_PGDATA_DIR);
         await freshInst.query('SELECT 1');

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { api, authStorage } from './services/api.ts';
 import { PostGroup, UserProfile, InstagramPublishPayload, TenantAccount } from './types/index.ts';
-import { filterPosts, CategoryFilter, formatDateTimeBR } from './utils/postHelpers.ts';
+import { filterPosts, CategoryFilter, MediaFilter, formatDateTimeBR } from './utils/postHelpers.ts';
 import { LoginView } from './components/LoginView.tsx';
 import { Header } from './components/Header.tsx';
 import { AdminTenantsView } from './components/AdminTenantsView.tsx';
@@ -48,6 +48,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<FilterTab>('PENDENTES');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('TODOS');
+  const [selectedMedia, setSelectedMedia] = useState<MediaFilter>('TODOS');
 
   // Modals state
   const [selectedPostForApproval, setSelectedPostForApproval] = useState<PostGroup | null>(null);
@@ -163,6 +164,22 @@ export default function App() {
     if (user) {
       loadPosts();
     }
+  }, [user, loadPosts]);
+
+  // Quando uma mídia não carrega de nenhuma fonte, o servidor já a marcou como indisponível:
+  // recarrega a lista para o post sumir sem precisar atualizar a página.
+  useEffect(() => {
+    if (!user) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onUnavailable = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => loadPosts(), 1500);
+    };
+    window.addEventListener('ato:media-unavailable', onUnavailable);
+    return () => {
+      if (timer) clearTimeout(timer);
+      window.removeEventListener('ato:media-unavailable', onUnavailable);
+    };
   }, [user, loadPosts]);
 
   // Listen for OAuth popup completion or error while inside the dashboard
@@ -448,8 +465,8 @@ export default function App() {
 
   // Posts filtered by company context + active status tab + search query + category sub-filter
   const filteredPosts = useMemo(() => {
-    return filterPosts(posts, activeTab, searchQuery, effectiveCompanyFilter, selectedCategory);
-  }, [posts, activeTab, searchQuery, effectiveCompanyFilter, selectedCategory]);
+    return filterPosts(posts, activeTab, searchQuery, effectiveCompanyFilter, selectedCategory, selectedMedia);
+  }, [posts, activeTab, searchQuery, effectiveCompanyFilter, selectedCategory, selectedMedia]);
 
   // Resolve folder ID for the currently selected company
   const selectedCompanyFolderId = useMemo(() => {
@@ -690,6 +707,8 @@ export default function App() {
               onSearchChange={setSearchQuery}
               selectedCategory={selectedCategory}
               onCategoryChange={setSelectedCategory}
+              selectedMedia={selectedMedia}
+              onMediaChange={setSelectedMedia}
               stats={computedStats}
             />
 

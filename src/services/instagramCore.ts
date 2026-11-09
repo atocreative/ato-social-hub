@@ -7,8 +7,92 @@ import {
   TenantAccount,
 } from '../types/index.ts';
 
+// Login do Instagram (legado, conta pessoal/app antigo): host graph.instagram.com
 export const IG_GRAPH_API_VERSION = 'v21.0';
 export const IG_GRAPH_BASE_URL = 'https://graph.instagram.com';
+// Login unificado (Facebook Login for Business + config_id): host graph.facebook.com
+export const IG_UNIFIED_GRAPH_API_VERSION = 'v27.0';
+export const IG_UNIFIED_GRAPH_BASE_URL = 'https://graph.facebook.com';
+export const UNIFIED_TOKEN_TYPE = 'UNIFIED_BISU';
+export type IgLoginMode = 'instagram_login' | 'unified';
+
+/** Base da Graph API conforme o fluxo de login que emitiu o token da conta. */
+export function igGraphBase(mode?: IgLoginMode): string {
+  return mode === 'unified'
+    ? `${IG_UNIFIED_GRAPH_BASE_URL}/${IG_UNIFIED_GRAPH_API_VERSION}`
+    : IG_GRAPH_BASE_URL;
+}
+
+/** Contas do login unificado são marcadas com tokenType = UNIFIED_BISU; as antigas continuam como LONG_LIVED. */
+export function loginModeForTenant(tenant?: { tokenType?: string } | null): IgLoginMode {
+  return tenant?.tokenType === UNIFIED_TOKEN_TYPE ? 'unified' : 'instagram_login';
+}
+export const IG_OAUTH_DIALOG_URL = 'https://www.facebook.com/dialog/oauth';
+export const DEFAULT_IG_LOGIN_CONFIG_ID = '1775718873720654';
+
+export function getInstagramLoginConfigId(): string {
+  return String(process.env.INSTAGRAM_CONFIG_ID || '').trim() || DEFAULT_IG_LOGIN_CONFIG_ID;
+}
+
+/**
+ * Troca o `code` do login unificado por token de usuário de sistema (BISU).
+ * GET https://graph.facebook.com/v27.0/oauth/access_token?client_id&client_secret&redirect_uri&code
+ */
+export async function exchangeUnifiedLoginCode(params: {
+  code: string;
+  clientId: string;
+  clientSecret: string;
+  redirectUri: string;
+}): Promise<{ ok: boolean; accessToken: string; expiresInSeconds: number; raw: any; status: number }> {
+  const fetchFn = getInstagramFetch();
+  const query = new URLSearchParams({
+    client_id: params.clientId,
+    client_secret: params.clientSecret,
+    redirect_uri: params.redirectUri,
+    code: params.code,
+  });
+  const resp = await fetchFn(
+    `${IG_UNIFIED_GRAPH_BASE_URL}/${IG_UNIFIED_GRAPH_API_VERSION}/oauth/access_token?${query.toString()}`,
+    { method: 'GET' }
+  );
+  const raw = await resp.json().catch(() => ({}));
+  const token = typeof raw?.access_token === 'string' ? raw.access_token.trim() : '';
+  return {
+    ok: resp.ok && Boolean(token),
+    accessToken: token,
+    expiresInSeconds:
+      typeof raw?.expires_in === 'number' && raw.expires_in > 0
+        ? raw.expires_in
+        : DEFAULT_LONG_LIVED_EXPIRES_IN_SEC,
+    raw,
+    status: resp.status,
+  };
+}
+
+/**
+ * Lista as contas profissionais do Instagram atribuídas ao token (sem depender de Página do Facebook).
+ * GET https://graph.facebook.com/v27.0/me/assigned_instagram_accounts?fields=id,username
+ */
+export async function fetchAssignedInstagramAccounts(accessToken: string): Promise<{
+  ok: boolean;
+  status: number;
+  accounts: Array<{ id: string; username: string }>;
+  raw: any;
+}> {
+  const fetchFn = getInstagramFetch();
+  const query = new URLSearchParams({ fields: 'id,username', access_token: accessToken });
+  const resp = await fetchFn(
+    `${IG_UNIFIED_GRAPH_BASE_URL}/${IG_UNIFIED_GRAPH_API_VERSION}/me/assigned_instagram_accounts?${query.toString()}`,
+    { method: 'GET' }
+  );
+  const raw = await resp.json().catch(() => ({}));
+  const accounts = Array.isArray(raw?.data)
+    ? raw.data
+        .filter((a: any) => a && a.id)
+        .map((a: any) => ({ id: String(a.id), username: String(a.username || '') }))
+    : [];
+  return { ok: resp.ok && !raw?.error, status: resp.status, accounts, raw };
+}
 export const REQUIRED_IG_SCOPES = [
   'instagram_business_basic',
   'instagram_business_content_publish',
@@ -250,7 +334,7 @@ export async function exchangeShortForLongLivedInstagramToken(params: {
 }): Promise<{
   ok: boolean;
   accessToken: string;
-  tokenType: 'LONG_LIVED' | 'SHORT_LIVED';
+  tokenType: string;
   expiresInSeconds: number;
   tokenIssuedAt: string;
   tokenExpiresAt: string;
@@ -354,6 +438,14 @@ export async function refreshAccountLongLivedToken(params: {
   tokenExpiresAt?: string;
   attemptsUsed?: number;
 }> {
+  // Tokens do login unificado não são renovados por ig_refresh_token (endpoint do Instagram Login antigo).
+  if (loginModeForTenant(params.tenant) === 'unified') {
+    return {
+      status: 'SKIPPED_NOT_DUE',
+      message:
+        'Conta do login unificado: a renovação por ig_refresh_token não se aplica. Reconecte a conta quando o token expirar.',
+    };
+  }
   const {
     tenant,
     secretKey,
@@ -614,6 +706,7 @@ export function classifyMetaError(httpStatus: number, metaError: any): {
  * GET https://graph.instagram.com/v21.0/{container_id}?fields=status_code,status
  */
 export async function waitForInstagramContainerReady(params: {
+  loginMode?: IgLoginMode;
   containerId: string;
   accessToken: string;
   maxAttempts?: number;
@@ -629,7 +722,7 @@ export async function waitForInstagramContainerReady(params: {
   const pollIntervalMs = params.pollIntervalMs ?? 1500;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const url = `${IG_GRAPH_BASE_URL}/${encodeURIComponent(
+    const url = `${igGraphBase(params.loginMode)}/${encodeURIComponent(
       params.containerId
     )}?fields=status_code,status&access_token=${encodeURIComponent(params.accessToken)}`;
 
@@ -682,6 +775,7 @@ export async function waitForInstagramContainerReady(params: {
  * before retrying publication, preventing duplicate posts.
  */
 export async function reconcileInstagramPublishedMedia(params: {
+  loginMode?: IgLoginMode;
   igUserId: string;
   accessToken: string;
   expectedCaption?: string;
@@ -693,7 +787,7 @@ export async function reconcileInstagramPublishedMedia(params: {
 }> {
   const fetchFn = getInstagramFetch();
   try {
-    const url = `${IG_GRAPH_BASE_URL}/${encodeURIComponent(
+    const url = `${igGraphBase(params.loginMode)}/${encodeURIComponent(
       params.igUserId
     )}/media?fields=id,caption,permalink,timestamp&limit=5&access_token=${encodeURIComponent(
       params.accessToken
@@ -727,12 +821,13 @@ export async function reconcileInstagramPublishedMedia(params: {
  * GET https://graph.instagram.com/v21.0/{media_id}?fields=id,permalink,timestamp,media_type
  */
 export async function fetchInstagramMediaPermalink(params: {
+  loginMode?: IgLoginMode;
   mediaId: string;
   accessToken: string;
 }): Promise<{ permalink?: string; timestamp?: string }> {
   const fetchFn = getInstagramFetch();
   try {
-    const url = `${IG_GRAPH_BASE_URL}/${encodeURIComponent(
+    const url = `${igGraphBase(params.loginMode)}/${encodeURIComponent(
       params.mediaId
     )}?fields=id,permalink,timestamp,media_type&access_token=${encodeURIComponent(
       params.accessToken
@@ -755,6 +850,7 @@ export async function fetchInstagramMediaPermalink(params: {
  * POST https://graph.instagram.com/v21.0/{ig_user_id}/media
  */
 async function createInstagramGraphContainer(params: {
+  loginMode?: IgLoginMode;
   igUserId: string;
   accessToken: string;
   candidateUrls: string[];
@@ -770,7 +866,7 @@ async function createInstagramGraphContainer(params: {
   rawMetaResponse: any;
 }> {
   const fetchFn = getInstagramFetch();
-  const endpoint = `${IG_GRAPH_BASE_URL}/${encodeURIComponent(params.igUserId)}/media`;
+  const endpoint = `${igGraphBase(params.loginMode)}/${encodeURIComponent(params.igUserId)}/media`;
 
   // Carousel Parent container
   if (params.mediaType === 'CAROUSEL' && params.childrenIds && params.childrenIds.length > 0) {
@@ -884,6 +980,7 @@ export async function executeInstagramGraphPublish(params: {
   metaError?: any;
   attemptRecord: PublishAttemptRecord;
 }> {
+  const loginMode = loginModeForTenant(params.tenant);
   const { post, tenant, caption, secretKey, prepareMediaFn, onMarkAccountReconnect } = params;
   const startedAtMs = Date.now();
   const startedAtIso = new Date(startedAtMs).toISOString();
@@ -1115,7 +1212,7 @@ export async function executeInstagramGraphPublish(params: {
       if (isCarousel) {
         childContainerIds.length = 0;
         for (let i = 0; i < preparedSlides.length; i++) {
-          const childRes = await createInstagramGraphContainer({
+          const childRes = await createInstagramGraphContainer({ loginMode, 
             igUserId,
             accessToken,
             candidateUrls: preparedSlides[i].candidateUrls,
@@ -1154,7 +1251,7 @@ export async function executeInstagramGraphPublish(params: {
           }
 
           // Check child container status
-          const childReady = await waitForInstagramContainerReady({
+          const childReady = await waitForInstagramContainerReady({ loginMode, 
             containerId: childRes.containerId,
             accessToken,
             maxAttempts: 5,
@@ -1183,7 +1280,7 @@ export async function executeInstagramGraphPublish(params: {
           childContainerIds.push(childRes.containerId);
         }
 
-        const parentRes = await createInstagramGraphContainer({
+        const parentRes = await createInstagramGraphContainer({ loginMode, 
           igUserId,
           accessToken,
           candidateUrls: [],
@@ -1227,7 +1324,7 @@ export async function executeInstagramGraphPublish(params: {
 
         parentContainerId = parentRes.containerId;
       } else {
-        const singleRes = await createInstagramGraphContainer({
+        const singleRes = await createInstagramGraphContainer({ loginMode, 
           igUserId,
           accessToken,
           candidateUrls: preparedSlides[0].candidateUrls,
@@ -1271,7 +1368,7 @@ export async function executeInstagramGraphPublish(params: {
     }
 
     // 5. Verify container processing status via GET /{container_id}?fields=status_code
-    const containerStatus = await waitForInstagramContainerReady({
+    const containerStatus = await waitForInstagramContainerReady({ loginMode, 
       containerId: parentContainerId,
       accessToken,
       maxAttempts: 6,
@@ -1306,7 +1403,7 @@ export async function executeInstagramGraphPublish(params: {
 
     // 6. Publish container via POST https://graph.instagram.com/v21.0/{ig_user_id}/media_publish
     const fetchFn = getInstagramFetch();
-    const publishEndpoint = `${IG_GRAPH_BASE_URL}/${encodeURIComponent(igUserId)}/media_publish`;
+    const publishEndpoint = `${igGraphBase(loginMode)}/${encodeURIComponent(igUserId)}/media_publish`;
 
     let publishedMediaId = '';
     let reconciledPermalink: string | undefined;
@@ -1333,7 +1430,7 @@ export async function executeInstagramGraphPublish(params: {
         publishedMediaId = String(publishRawData.id);
       } else if (publishResp.status >= 500 || !publishRawData?.error) {
         // Ambiguous outcome on media_publish: reconcile with Meta before failing or retrying
-        const reconciled = await reconcileInstagramPublishedMedia({
+        const reconciled = await reconcileInstagramPublishedMedia({ loginMode, 
           igUserId,
           accessToken,
           expectedCaption: isStory ? undefined : caption,
@@ -1347,7 +1444,7 @@ export async function executeInstagramGraphPublish(params: {
       }
     } catch (netErr: any) {
       // Network timeout/drop during media_publish: reconcile with Meta to avoid duplicate post
-      const reconciled = await reconcileInstagramPublishedMedia({
+      const reconciled = await reconcileInstagramPublishedMedia({ loginMode, 
         igUserId,
         accessToken,
         expectedCaption: isStory ? undefined : caption,
@@ -1418,7 +1515,7 @@ export async function executeInstagramGraphPublish(params: {
     }
 
     // 7. Fetch permalink of the confirmed publication
-    const mediaDetails = await fetchInstagramMediaPermalink({
+    const mediaDetails = await fetchInstagramMediaPermalink({ loginMode, 
       mediaId: publishedMediaId,
       accessToken,
     });

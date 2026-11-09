@@ -392,6 +392,14 @@ export const POSTGRES_MIGRATIONS: MigrationDefinition[] = [
       );
     `,
   },
+  {
+    version: '006_media_unavailable_flag',
+    name: 'Marca mídias cujo arquivo não existe mais no Drive para ocultá-las do sistema',
+    sql: `
+      ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS indisponivel BOOLEAN NOT NULL DEFAULT FALSE;
+      ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS indisponivel_em TIMESTAMPTZ;
+    `,
+  },
 ];
 
 export const ALL_MANAGED_TABLES = [
@@ -414,6 +422,90 @@ export const ALL_MANAGED_TABLES = [
   'client_observations',
 ] as const;
 
+type ColumnDefinition = { table: string; column: string; definition: string };
+
+const TABLE_CONSTRAINT_KEYWORDS = new Set(['primary', 'unique', 'constraint', 'check', 'foreign', 'exclude']);
+
+/**
+ * Extrai definições de coluna (tipo + DEFAULT, sem constraints) de CREATE TABLE e de
+ * ALTER TABLE ... ADD COLUMN presentes nas migrações. Usado para reconciliar bancos antigos.
+ */
+export function extractColumnDefinitions(sql: string): ColumnDefinition[] {
+  const defs: ColumnDefinition[] = [];
+
+  const pushColumn = (table: string, raw: string) => {
+    const text = raw
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('--'))
+      .join(' ')
+      .trim();
+    const m = text.match(/^(\w+)\s+([\s\S]+)$/);
+    if (!m || TABLE_CONSTRAINT_KEYWORDS.has(m[1].toLowerCase())) return;
+    const definition = m[2]
+      .replace(/REFERENCES\s+\w+\s*\([^)]*\)(\s+ON\s+DELETE\s+\w+(\s+\w+)?)?/gi, '')
+      .replace(/CHECK\s*\((?:[^()]|\([^()]*\))*\)/gi, '')
+      .replace(/\bNOT\s+NULL\b/gi, '')
+      .replace(/\bPRIMARY\s+KEY\b/gi, '')
+      .replace(/\bUNIQUE\b/gi, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (definition) defs.push({ table, column: m[1], definition });
+  };
+
+  const createRe = /CREATE TABLE IF NOT EXISTS\s+(\w+)\s*\(/gi;
+  let c: RegExpExecArray | null;
+  while ((c = createRe.exec(sql))) {
+    const table = c[1];
+    let depth = 1;
+    let buf = '';
+    for (let i = createRe.lastIndex; i < sql.length; i++) {
+      const ch = sql[i];
+      if (ch === '(') depth++;
+      if (ch === ')') depth--;
+      if (depth === 0) break;
+      if (ch === ',' && depth === 1) {
+        pushColumn(table, buf);
+        buf = '';
+        continue;
+      }
+      buf += ch;
+    }
+    pushColumn(table, buf);
+  }
+
+  const alterRe = /ALTER TABLE\s+(\w+)\s+ADD COLUMN IF NOT EXISTS\s+(\w+)\s+([^;]+)/gi;
+  let a: RegExpExecArray | null;
+  while ((a = alterRe.exec(sql))) {
+    pushColumn(a[1], `${a[2]} ${a[3]}`);
+  }
+
+  return defs;
+}
+
+/**
+ * Adiciona colunas que existam nas migrações mas faltem em tabelas já criadas (bancos com
+ * schema antigo, onde CREATE TABLE IF NOT EXISTS não altera nada). Idempotente e aditivo:
+ * nunca remove nem altera colunas existentes.
+ */
+export async function reconcileLegacyColumns(): Promise<string[]> {
+  const tablesRes = await dbQuery<{ table_name: string }>(
+    `SELECT table_name FROM information_schema.tables WHERE table_schema = current_schema()`
+  );
+  const existingTables = new Set(tablesRes.rows.map((r) => r.table_name));
+  const added: string[] = [];
+
+  for (const migration of POSTGRES_MIGRATIONS) {
+    for (const def of extractColumnDefinitions(migration.sql)) {
+      if (!existingTables.has(def.table)) continue;
+      await dbQuery(
+        `ALTER TABLE ${def.table} ADD COLUMN IF NOT EXISTS ${def.column} ${def.definition}`
+      );
+      added.push(`${def.table}.${def.column}`);
+    }
+  }
+  return added;
+}
+
 /**
  * Applies all pending versioned migrations idempotently without dropping existing data.
  */
@@ -428,6 +520,21 @@ export async function runDatabaseMigrations(): Promise<{
       applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
   `);
+
+  // Autocorreção: bancos locais podem ter uma schema_migrations antiga (sem a coluna "version").
+  // CREATE TABLE IF NOT EXISTS não altera tabelas existentes, então reconciliamos o formato aqui.
+  await dbQuery(`ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS version VARCHAR(128)`);
+  await dbQuery(`ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS name TEXT`);
+  await dbQuery(
+    `ALTER TABLE schema_migrations ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()`
+  );
+  await dbQuery(
+    `CREATE UNIQUE INDEX IF NOT EXISTS schema_migrations_version_uq ON schema_migrations (version)`
+  );
+
+  // Antes das migrações: colunas que faltam em tabelas antigas (ex.: users.role) precisam existir
+  // para que índices criados pelas migrações não falhem.
+  await reconcileLegacyColumns();
 
   const existingRes = await dbQuery<{ version: string }>('SELECT version FROM schema_migrations ORDER BY version ASC');
   const existingSet = new Set(existingRes.rows.map((r) => r.version));
@@ -457,6 +564,9 @@ export async function runDatabaseMigrations(): Promise<{
 
     applied.push(migration.version);
   }
+
+  // Depois das migrações: cobre tabelas criadas agora (ex.: 002/005 em bancos antigos).
+  await reconcileLegacyColumns();
 
   return { applied, alreadyApplied };
 }
