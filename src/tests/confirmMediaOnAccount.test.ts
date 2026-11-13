@@ -18,6 +18,16 @@ describe('confirmMediaOnAccount', () => {
     expect(await confirmMediaOnAccount({ igUserId: '1', accessToken: 'tok', mediaId: '111', attempts: 1, delayMs: 0 })).toBe(true);
   });
 
+  it('confirma pela consulta direta do ID mesmo se a listagem ainda não mostra a mídia', async () => {
+    setInstagramFetchOverride(async (url) => {
+      if (String(url).includes('/media?')) {
+        return new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify({ id: '111' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    });
+    expect(await confirmMediaOnAccount({ igUserId: '1', accessToken: 'tok', mediaId: '111', attempts: 1, delayMs: 0 })).toBe(true);
+  });
+
   it('não confirma quando a mídia não aparece no perfil', async () => {
     listWith(['999']);
     expect(await confirmMediaOnAccount({ igUserId: '1', accessToken: 'tok', mediaId: '111', attempts: 2, delayMs: 0 })).toBe(false);

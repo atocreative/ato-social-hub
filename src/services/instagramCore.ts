@@ -1110,6 +1110,49 @@ export async function executeInstagramGraphPublish(params: {
       };
     }
 
+    // Evita duplicata: se uma tentativa anterior já foi aceita pela Meta (há instagramMediaId
+    // salvo, mas o post não ficou PUBLICADO por não aparecer no perfil), confirma essa mídia
+    // em vez de publicar o carrossel/imagem de novo.
+    if (post.instagramMediaId && post.status !== 'PUBLICADO') {
+      const alreadyLive = await confirmMediaOnAccount({
+        loginMode,
+        igUserId,
+        accessToken,
+        mediaId: post.instagramMediaId,
+      });
+      if (alreadyLive) {
+        const mediaDetails = await fetchInstagramMediaPermalink({
+          loginMode,
+          mediaId: post.instagramMediaId,
+          accessToken,
+        });
+        const finishedAtIso = new Date().toISOString();
+        return {
+          ok: true,
+          status: 'PUBLISHED',
+          httpStatus: 200,
+          containerId: post.instagramContainerId,
+          childContainerIds: post.childContainerIds,
+          instagramMediaId: post.instagramMediaId,
+          permalink: mediaDetails.permalink || post.instagramPermalink,
+          publishedAt: mediaDetails.timestamp || finishedAtIso,
+          attemptRecord: {
+            attemptNumber,
+            startedAt: startedAtIso,
+            finishedAt: finishedAtIso,
+            accountId: tenant.id,
+            igUserId,
+            containerId: post.instagramContainerId,
+            childContainerIds: post.childContainerIds,
+            mediaId: post.instagramMediaId,
+            permalink: mediaDetails.permalink || post.instagramPermalink,
+            status: 'RECONCILED_SUCCESS',
+            httpStatus: 200,
+          },
+        };
+      }
+    }
+
     if (isAccountTokenExpired(tenant, startedAtMs)) {
       const msg = `O token de acesso da conta @${tenant.username} expirou em ${tenant.tokenExpiresAt || 'data anterior'} (Erro 190). Reconecte a conta do Instagram para publicar.`;
       onMarkAccountReconnect(tenant, msg);
@@ -1568,15 +1611,26 @@ export async function confirmMediaOnAccount(params: {
   delayMs?: number;
 }): Promise<boolean> {
   const fetchFn = getInstagramFetch();
-  const attempts = Math.max(1, params.attempts ?? 4);
-  const delayMs = params.delayMs ?? 5000;
-  const url = `${igGraphBase(params.loginMode)}/${encodeURIComponent(
-    params.igUserId
-  )}/media?fields=id&limit=25&access_token=${encodeURIComponent(params.accessToken)}`;
+  const attempts = Math.max(1, params.attempts ?? 6);
+  const delayMs = params.delayMs ?? 8000;
+  const base = igGraphBase(params.loginMode);
+  const token = encodeURIComponent(params.accessToken);
+  const listUrl = `${base}/${encodeURIComponent(params.igUserId)}/media?fields=id&limit=50&access_token=${token}`;
+  // Consulta direta pelo ID da mídia: confirma a existência mesmo se a listagem do perfil atrasar.
+  const directUrl = `${base}/${encodeURIComponent(params.mediaId)}?fields=id&access_token=${token}`;
 
   for (let i = 0; i < attempts; i++) {
     try {
-      const resp = await fetchFn(url, { method: 'GET' });
+      const resp = await fetchFn(directUrl, { method: 'GET' });
+      if (resp.ok) {
+        const data: any = await resp.json().catch(() => ({}));
+        if (String(data?.id || '') === String(params.mediaId)) return true;
+      }
+    } catch {
+      // tenta de novo
+    }
+    try {
+      const resp = await fetchFn(listUrl, { method: 'GET' });
       if (resp.ok) {
         const data: any = await resp.json().catch(() => ({}));
         const list: any[] = Array.isArray(data?.data) ? data.data : [];

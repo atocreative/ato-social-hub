@@ -531,6 +531,9 @@ export class PublicationService {
       ...targetPost,
       status: finalStatus,
       caption: caption || targetPost.caption || '',
+      // Guarda o ID aceito pela Meta (só existe aqui quando a confirmação no perfil falhou),
+      // para um reagendamento reconhecer a mídia e não publicar duplicata.
+      instagramMediaId: publishRes.instagramMediaId || targetPost.instagramMediaId,
       instagramContainerId: publishRes.containerId || targetPost.instagramContainerId,
       childContainerIds: publishRes.childContainerIds || targetPost.childContainerIds,
       publishAttempts: attemptNumber,
