@@ -391,9 +391,10 @@ export const PostCard: React.FC<PostCardProps> = ({
                 )}
               </div>
             )}
-            {!isClean && post.failureReason && post.status !== 'PUBLICADO' && (
-              <div className="text-[#EF4444] break-words">
-                {post.failureReason}
+            {post.failureReason && post.status !== 'PUBLICADO' && (
+              <div className="text-[#EF4444] break-words" title={post.failureReason}>
+                {/* No modo limpo o motivo continua visível: é a única pista do que falhou */}
+                {isClean ? post.failureReason.slice(0, 160) : post.failureReason}
               </div>
             )}
           </div>
