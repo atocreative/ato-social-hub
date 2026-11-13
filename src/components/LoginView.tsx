@@ -36,7 +36,17 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigate
       }
 
       if (event.data.type === 'INSTAGRAM_AUTH_SUCCESS') {
-        const { token, user, tenant, syncTicket } = event.data;
+        const { token: messageToken, user, tenant, syncTicket } = event.data;
+        // O callback NÃO envia o token na mensagem: a popup grava a sessão no localStorage
+        // do mesmo domínio. Lemos esse valor ANTES de limpar o storage.
+        let token: string | null = messageToken || null;
+        if (!token) {
+          try {
+            token = localStorage.getItem('ato_social_jwt_token');
+          } catch {
+            token = null;
+          }
+        }
         if (token && user) {
           localStorage.clear();
           sessionStorage.clear();
