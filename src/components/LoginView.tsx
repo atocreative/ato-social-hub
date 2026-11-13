@@ -9,20 +9,16 @@ interface LoginViewProps {
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigateLegal }) => {
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-
-  // Standard Email and Password fields
+  // Acesso administrativo (e-mail e senha)
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [name, setName] = useState('');
-  const [companyName, setCompanyName] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
 
   const [loading, setLoading] = useState(false);
   const [oauthLoading, setOauthLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Listen for popup OAuth messages (Meta / Instagram callback)
+  // Retorno do popup OAuth do Instagram
   useEffect(() => {
     const handleOAuthMessage = async (event: MessageEvent) => {
       if (!event.data) return;
@@ -66,7 +62,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigate
     return () => window.removeEventListener('message', handleOAuthMessage);
   }, [onLoginSuccess]);
 
-  // Check URL query token or ig_error if redirected in same window
+  // Erro vindo de redirect (ig_error) ou token na URL
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const igError = params.get('ig_error');
@@ -96,7 +92,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigate
     }
   }, [onLoginSuccess]);
 
-  // 1A. Standard Login Form (Admin or registered Client)
+  // Acesso administrativo
   const handleSubmitLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
@@ -116,41 +112,15 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigate
       authStorage.setSession(data.token, data.user);
       onLoginSuccess(data.user);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Credenciais inválidas. Verifique o e-mail e a senha informados.');
+      setErrorMessage(
+        err.message || 'Credenciais inválidas. Verifique o e-mail e a senha informados.'
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  // 1B. Native Registration in ATO Social Hub (Enters Admin Approval Queue without requiring Instagram upfront)
-  const handleSubmitRegister = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
-    setLoading(true);
-    localStorage.clear();
-    sessionStorage.clear();
-    authStorage.clearSession();
-
-    try {
-      const data = await api.register({
-        name: name.trim(),
-        email: email.trim(),
-        password,
-        companyName: companyName.trim() || undefined,
-      });
-      if (!data || !data.user || !data.user.role) {
-        throw new Error('Não foi possível concluir o cadastro. Tente novamente.');
-      }
-      authStorage.setSession(data.token, data.user);
-      onLoginSuccess(data.user);
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Não foi possível concluir o cadastro.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // 2. Official Instagram OAuth Login
+  // Entrada principal: conta profissional do Instagram
   const handleInstagramOAuth = async () => {
     setErrorMessage(null);
     setOauthLoading(true);
@@ -186,61 +156,95 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigate
     }
   };
 
+  const legalLink = (path: string, label: string) => (
+    <a
+      href={path}
+      onClick={(e) => {
+        if (onNavigateLegal) {
+          e.preventDefault();
+          onNavigateLegal(path);
+        }
+      }}
+      className="hover:text-[#10B981] transition-colors underline-offset-4 hover:underline"
+    >
+      {label}
+    </a>
+  );
+
   return (
-    <div className="min-h-screen bg-[#0A0A0A] flex flex-col items-center justify-center p-6 text-[#FFFFFF] font-sans">
-      <div className="w-full max-w-[420px]">
-        {/* Brand Logo Header */}
-        <div className="flex flex-col items-center mb-8">
-          <div className="flex items-center gap-2 mb-2">
-            <BrandLogo variant="dot" height={44} />
-          </div>
-          <span className="text-xs text-[#8E8E93]">Portal de Mídias & Aprovação</span>
+    <div className="min-h-screen bg-[#0A0A0A] text-white font-sans md:grid md:grid-cols-2">
+      {/* Coluna da marca (somente desktop) */}
+      <aside className="hidden md:flex flex-col justify-between p-12 border-r border-[#1C1C1C] bg-[#0A0A0A]">
+        <BrandLogo variant="dot" height={36} />
+        <div>
+          <p className="text-xs tracking-[0.3em] text-[#8E8E93] uppercase mb-4">
+            Gestão de redes sociais
+          </p>
+          <h1 className="text-4xl font-bold leading-tight">
+            Seus posts <span className="text-[#10B981]">programados</span>, no lugar certo.
+          </h1>
+          <p className="mt-4 text-[#8E8E93] max-w-md">
+            Organize, agende e acompanhe as publicações da sua conta profissional do Instagram.
+          </p>
         </div>
+        <ul className="space-y-3 text-sm text-[#8E8E93]">
+          <li>• Agenda visual dos posts programados</li>
+          <li>• Status de publicação em tempo real</li>
+          <li>• Memória criativa para as próximas artes</li>
+        </ul>
+      </aside>
 
-        {/* Single Centered Unified Card */}
-        <div className="bg-[#121212] border border-[#242424] rounded-2xl p-6 sm:p-7 shadow-xl">
-          {/* Mode Tabs: Entrar vs Solicitar Cadastro */}
-          <div className="grid grid-cols-2 gap-1.5 p-1 bg-[#0A0A0A] border border-[#242424] rounded-xl mb-5">
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode('login');
-                setErrorMessage(null);
-              }}
-              className={`py-2 px-3 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                authMode === 'login'
-                  ? 'bg-[#1F1F22] text-white border border-[#2E2E32]'
-                  : 'text-[#8E8E93] hover:text-white'
-              }`}
-            >
-              Entrar
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode('register');
-                setErrorMessage(null);
-              }}
-              className={`py-2 px-3 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
-                authMode === 'register'
-                  ? 'bg-[#1F1F22] text-white border border-[#2E2E32]'
-                  : 'text-[#8E8E93] hover:text-white'
-              }`}
-            >
-              Solicitar Cadastro
-            </button>
+      {/* Card de acesso */}
+      <main className="flex flex-col items-center justify-center p-6 md:p-12 min-h-screen md:min-h-0">
+        <div className="w-full max-w-[380px]">
+          <div className="md:hidden flex justify-center mb-8">
+            <BrandLogo variant="dot" height={36} />
           </div>
 
-          {errorMessage && (
-            <div className="mb-5 p-3 bg-red-950/30 border border-[#EF4444]/40 rounded-lg text-[#EF4444] text-xs leading-relaxed">
-              {errorMessage}
-            </div>
-          )}
+          <div className="bg-[#121212] border border-[#242424] rounded-2xl p-7 shadow-xl">
+            <h2 className="text-xl font-semibold">Entrar</h2>
+            <p className="text-sm text-[#8E8E93] mt-1 mb-6">
+              Use sua conta profissional do Instagram.
+            </p>
 
-          {authMode === 'login' ? (
-            <>
-              {/* Email + Password Login Form */}
-              <form onSubmit={handleSubmitLogin} className="space-y-4">
+            {errorMessage && (
+              <div className="mb-5 p-3 bg-red-950/30 border border-[#EF4444]/40 rounded-lg text-[#EF4444] text-xs leading-relaxed">
+                {errorMessage}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={handleInstagramOAuth}
+              disabled={loading || oauthLoading}
+              className="w-full py-3 px-4 bg-[#10B981] hover:bg-[#0EA271] text-[#0A0A0A] font-semibold text-sm rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-2.5 disabled:opacity-50"
+            >
+              <svg
+                className="w-4 h-4 shrink-0"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
+                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
+              </svg>
+              <span>{oauthLoading ? 'Conectando...' : 'Conectar com Instagram'}</span>
+            </button>
+
+            <p className="text-xs text-[#8E8E93] mt-4 leading-relaxed">
+              Ao conectar, você autoriza o ATO Social Hub a ler o perfil básico e publicar
+              conteúdos aprovados na sua conta.
+            </p>
+
+            <details className="mt-6 border-t border-[#242424] pt-4">
+              <summary className="text-xs text-[#8E8E93] cursor-pointer hover:text-white select-none">
+                Acesso administrativo
+              </summary>
+              <form onSubmit={handleSubmitLogin} className="space-y-4 mt-4">
                 <div>
                   <label className="block text-xs text-[#8E8E93] mb-1.5" htmlFor="login-email">
                     E-mail
@@ -271,186 +275,34 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigate
                   />
                 </div>
 
-                {/* Manter conectado checkbox */}
-                <div className="flex items-center justify-between text-xs text-[#8E8E93] pt-0.5">
-                  <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      className="w-3.5 h-3.5 rounded bg-[#0A0A0A] border-[#242424] text-[#10B981] focus:ring-0 focus:ring-offset-0 cursor-pointer accent-[#10B981]"
-                    />
-                    <span>Manter conectado</span>
-                  </label>
-                </div>
+                <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-[#8E8E93]">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="w-3.5 h-3.5 rounded bg-[#0A0A0A] border-[#242424] accent-[#10B981] cursor-pointer"
+                  />
+                  <span>Manter conectado</span>
+                </label>
 
                 <button
                   type="submit"
                   disabled={loading || oauthLoading}
-                  className="w-full mt-2 bg-[#10B981] hover:bg-[#0EA271] text-[#0A0A0A] font-semibold py-2.5 px-4 rounded-lg text-sm transition-colors cursor-pointer disabled:opacity-50"
+                  className="w-full bg-[#1F1F22] hover:bg-[#2A2A2E] border border-[#2E2E32] text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors cursor-pointer disabled:opacity-50"
                 >
                   {loading ? 'Entrando...' : 'Entrar'}
                 </button>
               </form>
+            </details>
+          </div>
 
-              {/* Divider */}
-              <div className="relative my-6">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-[#242424]" />
-                </div>
-                <div className="relative flex justify-center text-xs">
-                  <span className="bg-[#121212] px-3 text-[#8E8E93]">ou</span>
-                </div>
-              </div>
-
-              {/* Official Instagram OAuth Button */}
-              <button
-                type="button"
-                onClick={handleInstagramOAuth}
-                disabled={loading || oauthLoading}
-                className="w-full py-2.5 px-4 bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#F77737] hover:opacity-95 text-white font-medium text-sm rounded-lg transition-opacity cursor-pointer flex items-center justify-center gap-2.5 disabled:opacity-50 shadow-md"
-              >
-                <svg
-                  className="w-4 h-4 text-white shrink-0"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
-                  <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-                  <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
-                </svg>
-                <span>{oauthLoading ? 'Conectando...' : 'Conectar com Instagram'}</span>
-              </button>
-            </>
-          ) : (
-            <form onSubmit={handleSubmitRegister} className="space-y-3.5">
-              <div className="p-3 bg-[#0A0A0A] border border-[#242424] rounded-lg text-xs text-[#8E8E93] leading-relaxed">
-                Solicite seu acesso ao <strong className="text-white">ATO Social Hub</strong>. Após a aprovação administrativa da sua empresa, você poderá conectar sua conta profissional do Instagram para agendar e publicar conteúdos.
-              </div>
-
-              <div>
-                <label className="block text-xs text-[#8E8E93] mb-1.5" htmlFor="register-name">
-                  Seu Nome
-                </label>
-                <input
-                  id="register-name"
-                  type="text"
-                  required
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Ex: Ana Silva"
-                  className="w-full bg-[#0A0A0A] border border-[#242424] focus:border-[#10B981] rounded-lg px-3 py-2 text-sm text-white placeholder-[#4E4E52] outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-[#8E8E93] mb-1.5" htmlFor="register-company">
-                  Empresa / Marca
-                </label>
-                <input
-                  id="register-company"
-                  type="text"
-                  required
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  placeholder="Nome da sua empresa"
-                  className="w-full bg-[#0A0A0A] border border-[#242424] focus:border-[#10B981] rounded-lg px-3 py-2 text-sm text-white placeholder-[#4E4E52] outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-[#8E8E93] mb-1.5" htmlFor="register-email">
-                  E-mail Corporativo
-                </label>
-                <input
-                  id="register-email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="voce@suaempresa.com.br"
-                  className="w-full bg-[#0A0A0A] border border-[#242424] focus:border-[#10B981] rounded-lg px-3 py-2 text-sm text-white placeholder-[#4E4E52] outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs text-[#8E8E93] mb-1.5" htmlFor="register-password">
-                  Criar Senha (mín. 6 caracteres)
-                </label>
-                <input
-                  id="register-password"
-                  type="password"
-                  required
-                  minLength={6}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-[#0A0A0A] border border-[#242424] focus:border-[#10B981] rounded-lg px-3 py-2 text-sm text-white placeholder-[#4E4E52] outline-none"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full mt-2 bg-[#10B981] hover:bg-[#0EA271] text-[#0A0A0A] font-semibold py-2.5 px-4 rounded-lg text-sm transition-colors cursor-pointer disabled:opacity-50"
-              >
-                {loading ? 'Enviando solicitação...' : 'Solicitar Cadastro e Entrar na Fila'}
-              </button>
-            </form>
-          )}
+          <footer className="mt-6 text-center text-xs text-[#8E8E93] flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5">
+            {legalLink('/privacidade', 'Política de Privacidade')}
+            <span className="text-[#3A3A3C]">·</span>
+            {legalLink('/termos', 'Termos de Uso')}
+          </footer>
         </div>
-
-        {/* Footer Legal Links Required by Meta App Review */}
-        <footer className="mt-6 text-center">
-          <nav
-            aria-label="Links institucionais e privacidade"
-            className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 text-xs text-[#8E8E93]"
-          >
-            <a
-              href="/privacidade"
-              onClick={(e) => {
-                if (onNavigateLegal) {
-                  e.preventDefault();
-                  onNavigateLegal('/privacidade');
-                }
-              }}
-              className="hover:text-[#10B981] transition-colors underline-offset-4 hover:underline"
-            >
-              Política de Privacidade
-            </a>
-            <span className="text-[#3A3A3C]">·</span>
-            <a
-              href="/termos"
-              onClick={(e) => {
-                if (onNavigateLegal) {
-                  e.preventDefault();
-                  onNavigateLegal('/termos');
-                }
-              }}
-              className="hover:text-[#10B981] transition-colors underline-offset-4 hover:underline"
-            >
-              Termos de Uso
-            </a>
-            <span className="text-[#3A3A3C]">·</span>
-            <a
-              href="/exclusao-de-dados"
-              onClick={(e) => {
-                if (onNavigateLegal) {
-                  e.preventDefault();
-                  onNavigateLegal('/exclusao-de-dados');
-                }
-              }}
-              className="hover:text-[#10B981] transition-colors underline-offset-4 hover:underline"
-            >
-              Exclusão de Dados
-            </a>
-          </nav>
-        </footer>
-      </div>
+      </main>
     </div>
   );
 };
