@@ -12,6 +12,7 @@ export const STATUS_LABEL: Partial<Record<PostStatus, string>> = {
   RECONEXAO_NECESSARIA: 'Reconexão necessária',
   CANCELADO: 'Cancelado',
   REPROVADO: 'Reprovado',
+  NAO_VOU_POSTAR: 'Não vou postar',
 };
 
 export function statusLabel(status: PostStatus): string {

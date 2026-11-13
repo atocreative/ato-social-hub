@@ -113,6 +113,11 @@ import {
   buildDeletionAuditEntry,
 } from './src/services/accountDeletion.ts';
 import {
+  organizeTransition,
+  ORGANIZE_TARGETS,
+  type OrganizeTarget,
+} from './src/services/postOrganize.ts';
+import {
   generateCaptionWithGemini,
   getGeminiConfigStatus,
 } from './src/services/geminiCaptionService.ts';
@@ -5008,6 +5013,33 @@ app.post('/api/posts/:id/hide', requireAuth, async (req: AuthenticatedRequest, r
     postId: id,
     scheduleCancelled,
   });
+});
+
+// Organizar post pelo usuário: marcar como publicado, "não vou postar" ou voltar para pendentes.
+// Só muda a etapa dentro do sistema: NÃO publica nem apaga nada no Instagram.
+app.post('/api/posts/:id/organize', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const { id } = req.params;
+  const user = req.user!;
+  const target = String(req.body?.target || '') as OrganizeTarget;
+  if (!ORGANIZE_TARGETS.includes(target)) {
+    return res.status(400).json({ error: 'Etapa inválida.' });
+  }
+
+  const targetPost = postGroups.find((p) => p.id === id) || (await getPostGroupByIdFromDb(id));
+  if (!targetPost) {
+    return res.status(404).json({ error: 'Post ou lote não encontrado.' });
+  }
+  if (!canUserAccessPost(user, targetPost)) {
+    return res.status(403).json({ error: 'Acesso negado: você não tem permissão para alterar este post.' });
+  }
+
+  Object.assign(targetPost, organizeTransition(targetPost, target, new Date().toISOString()));
+  syncPostGroupStateToItemsAndMeta(targetPost);
+  if (!testStateOverrideActive) {
+    await upsertPostGroupToDb(targetPost);
+  }
+
+  return res.json({ success: true, postId: id, status: targetPost.status });
 });
 
 // Restaurar mídia apagada pelo cliente (POST /api/posts/:id/unhide)

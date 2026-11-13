@@ -543,7 +543,7 @@ export default function App() {
     return (
       <UserLayout user={user} view={userView} onChangeView={setUserView} onLogout={handleLogout}>
         {userView === 'dashboard' && <UserDashboard posts={posts} />}
-        {userView === 'posts' && <PostsView posts={posts} />}
+        {userView === 'posts' && <PostsView posts={posts} onOrganized={loadPosts} />}
         {userView === 'agenda' && <AgendaView posts={posts} />}
         {userView === 'memoria' && (
           <MemoryView

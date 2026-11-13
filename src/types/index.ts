@@ -11,7 +11,8 @@ export type PostStatus =
   | 'FALHA_PUBLICACAO'
   | 'RECONEXAO_NECESSARIA'
   | 'CANCELADO'
-  | 'REPROVADO';
+  | 'REPROVADO'
+  | 'NAO_VOU_POSTAR';
 
 export type ConnectionStatus =
   | 'CONECTADO'

@@ -136,6 +136,18 @@ export const api = {
     });
   },
 
+  // Organizar post: marcar como publicado, "não vou postar" ou voltar para pendentes.
+  // Não publica nem apaga nada no Instagram.
+  organizePost: async (
+    id: string,
+    target: 'PUBLICADO' | 'NAO_VOU_POSTAR' | 'PENDENTE'
+  ): Promise<{ success: boolean; status?: string; error?: string }> => {
+    return apiFetch(`/api/posts/${encodeURIComponent(id)}/organize`, {
+      method: 'POST',
+      body: JSON.stringify({ target }),
+    });
+  },
+
   // Obter URL oficial de autorização do Instagram OAuth 2.0
   getInstagramAuthUrl: async (
     origin?: string,
