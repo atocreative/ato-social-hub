@@ -573,6 +573,8 @@ export default function App() {
             onConfirmReject={handleUserReject}
             onHide={handleUserHide}
             onUnhide={handleUnhidePost}
+            onSyncDrive={handleSyncDriveNow}
+            syncing={syncingDrive}
           />
         )}
         {userView === 'agenda' && <AgendaView posts={posts} />}

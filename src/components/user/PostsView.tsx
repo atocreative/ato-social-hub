@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Upload } from 'lucide-react';
+import { RefreshCw, Upload } from 'lucide-react';
 import type { PostGroup, InstagramPublishPayload } from '../../types/index.ts';
 import { filterPosts, type CategoryFilter, type MediaFilter } from '../../utils/postHelpers.ts';
 import { api } from '../../services/api.ts';
@@ -40,6 +40,9 @@ interface PostsViewProps {
   ) => Promise<void>;
   onHide: (post: PostGroup) => Promise<void>;
   onUnhide: (post: PostGroup) => Promise<void>;
+  /** Busca os conteúdos novos no Drive e grava no sistema. */
+  onSyncDrive?: () => Promise<void>;
+  syncing?: boolean;
 }
 
 export const PostsView: React.FC<PostsViewProps> = ({
@@ -51,6 +54,8 @@ export const PostsView: React.FC<PostsViewProps> = ({
   onConfirmReject,
   onHide,
   onUnhide,
+  onSyncDrive,
+  syncing = false,
 }) => {
   const [tab, setTab] = useState<Tab>('TODOS');
   const [category, setCategory] = useState<CategoryFilter>('TODOS');
@@ -65,6 +70,22 @@ export const PostsView: React.FC<PostsViewProps> = ({
     const base = filterPosts(posts, tab === 'NAO_VOU_POSTAR' ? 'TODOS' : tab, '', undefined, category, media);
     return tab === 'NAO_VOU_POSTAR' ? base.filter((p) => p.status === 'NAO_VOU_POSTAR') : base;
   }, [posts, tab, category, media]);
+
+  // Quantidade de posts em cada aba (sem os filtros de tipo e formato)
+  const tabCounts = useMemo(() => {
+    const count = (t: Tab) =>
+      t === 'NAO_VOU_POSTAR'
+        ? (posts || []).filter((p) => p.status === 'NAO_VOU_POSTAR').length
+        : filterPosts(posts, t, '', undefined, 'TODOS', 'TODOS').length;
+    return {
+      TODOS: count('TODOS'),
+      PENDENTES: count('PENDENTES'),
+      AGENDADOS: count('AGENDADOS'),
+      PUBLICADOS: count('PUBLICADOS'),
+      NAO_VOU_POSTAR: count('NAO_VOU_POSTAR'),
+      REPROVADOS: count('REPROVADOS'),
+    } as Record<Tab, number>;
+  }, [posts]);
 
   const organize = async (post: PostGroup, target: 'NAO_VOU_POSTAR' | 'PENDENTE') => {
     setError(null);
@@ -107,14 +128,27 @@ export const PostsView: React.FC<PostsViewProps> = ({
           <h1 className="text-2xl font-bold">Posts</h1>
           <p className="text-sm text-[#8E8E93] mt-1">Aprove, agende, reprove e organize suas publicações.</p>
         </div>
-        <button
-          type="button"
-          onClick={() => setUploadOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#10B981] hover:bg-[#0EA271] text-[#0A0A0A] font-semibold text-sm cursor-pointer"
-        >
-          <Upload className="w-4 h-4" />
-          <span>Enviar mídia</span>
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {onSyncDrive && (
+            <button
+              type="button"
+              onClick={() => onSyncDrive()}
+              disabled={syncing}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[#2E2E2E] bg-[#1A1A1A] hover:bg-[#242424] text-white font-medium text-sm cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 text-[#10B981] ${syncing ? 'animate-spin' : ''}`} />
+              <span>{syncing ? 'Atualizando...' : 'Atualizar posts'}</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setUploadOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#10B981] hover:bg-[#0EA271] text-[#0A0A0A] font-semibold text-sm cursor-pointer"
+          >
+            <Upload className="w-4 h-4" />
+            <span>Enviar mídia</span>
+          </button>
+        </div>
       </header>
 
       <div className="flex flex-wrap gap-2">
@@ -129,7 +163,7 @@ export const PostsView: React.FC<PostsViewProps> = ({
                 : 'border-[#242424] text-[#8E8E93] hover:text-white'
             }`}
           >
-            {t.label}
+            {t.label} <span className="font-semibold">{tabCounts[t.id]}</span>
           </button>
         ))}
       </div>

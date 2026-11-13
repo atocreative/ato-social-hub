@@ -4464,10 +4464,25 @@ app.post('/api/posts/sync-drive', requireAuth, async (_req: AuthenticatedRequest
     0
   );
 
+  // Grava no sistema os lotes que o Drive trouxe (posts novos entram como PENDENTE) e persiste no banco.
+  // Sem isso, "Atualizar posts" recarregava a tela mas não trazia nada novo.
+  let ingestedFiles = 0;
+  try {
+    const ingested = processIncomingPayload(syncResult.data);
+    ingestedFiles = ingested.insertedOrUpdatedFilesCount;
+    await persistStateToPostgres();
+  } catch (err: any) {
+    console.error('[sync-drive] Falha ao gravar lotes do Drive:', err?.message || err);
+    return res.status(500).json({
+      success: false,
+      error: 'Os conteúdos do Drive foram lidos, mas não foi possível salvar no sistema. Tente de novo.',
+    });
+  }
+
   return res.json({
     success: true,
     sucesso: true,
-    message: `Sincronização concluída com sucesso (${folders.length} pasta(s), ${totalArquivos} criativo(s)).`,
+    message: `Sincronização concluída com sucesso (${folders.length} pasta(s), ${totalArquivos} criativo(s), ${ingestedFiles} gravado(s)).`,
     pastas,
     lotes,
     totalArquivos,
