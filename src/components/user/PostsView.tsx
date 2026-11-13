@@ -197,7 +197,6 @@ export const PostsView: React.FC<PostsViewProps> = ({
           onClose={() => setApproving(null)}
           onConfirmPublish={onConfirmPublish}
           onPublishInstagramNow={onPublishInstagramNow}
-          allowAiCaption={false}
         />
       )}
 

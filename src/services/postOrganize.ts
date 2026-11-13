@@ -36,7 +36,15 @@ export interface OrganizePatch {
 }
 
 export function organizeTransition(
-  _current: { status: string; scheduledAt?: string; scheduledAccountId?: string; publishedAt?: string },
+  _current: {
+    status: string;
+    scheduledAt?: string;
+    scheduledAccountId?: string;
+    publishedAt?: string;
+    instagramMediaId?: string;
+    instagramContainerId?: string;
+    childContainerIds?: string[];
+  },
   target: OrganizeTarget,
   nowIso: string,
   details: OrganizeDetails = {}
