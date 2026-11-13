@@ -785,6 +785,11 @@ export async function reconcileInstagramPublishedMedia(params: {
   mediaId?: string;
   permalink?: string;
 }> {
+  // Sem legenda esperada não há como provar que a mídia é deste post: não concilia.
+  // (Antes, legenda vazia casava com QUALQUER mídia recente e marcava o post como publicado.)
+  const expectedClean = String(params.expectedCaption || '').trim();
+  if (!expectedClean) return { found: false };
+
   const fetchFn = getInstagramFetch();
   try {
     const url = `${igGraphBase(params.loginMode)}/${encodeURIComponent(
@@ -797,12 +802,11 @@ export async function reconcileInstagramPublishedMedia(params: {
     const data = await resp.json().catch(() => ({}));
     const list: any[] = Array.isArray(data?.data) ? data.data : [];
 
-    const expectedClean = String(params.expectedCaption || '').trim();
     for (const item of list) {
       const itemTimeMs = item.timestamp ? Date.parse(item.timestamp) : 0;
       const isRecent = itemTimeMs >= params.sinceTimestampMs - 120_000;
       const itemCaption = String(item.caption || '').trim();
-      if (isRecent && item.id && (!expectedClean || itemCaption === expectedClean)) {
+      if (isRecent && item.id && itemCaption === expectedClean) {
         return {
           found: true,
           mediaId: String(item.id),
