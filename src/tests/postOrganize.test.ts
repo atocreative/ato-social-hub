@@ -24,14 +24,34 @@ describe('organizeTransition', () => {
     expect(patch.scheduledAt).toBeUndefined();
   });
 
-  it('voltar para pendentes: limpa publishedAt e agendamento', () => {
+  it('voltar para pendentes: limpa publishedAt, agendamento e IDs da publicação anterior', () => {
     const patch = organizeTransition({ status: 'PUBLICADO', publishedAt: '2026-11-10T10:00:00Z' }, 'PENDENTE', NOW);
     expect(patch).toEqual({
       status: 'PENDENTE',
       publishedAt: undefined,
       scheduledAt: undefined,
       scheduledAccountId: undefined,
+      instagramMediaId: undefined,
+      instagramContainerId: undefined,
+      childContainerIds: [],
+      instagramPermalink: undefined,
+      publishAttempts: 0,
+      lastAttemptAt: undefined,
+      nextRetryAt: null,
+      failureReason: null,
+      publishLock: null,
     });
+  });
+
+  it('voltar para pendentes: nunca reaproveita containers da publicação anterior', () => {
+    const patch = organizeTransition(
+      { status: 'PUBLICADO', instagramMediaId: 'm1', instagramContainerId: 'c1', childContainerIds: ['x'] },
+      'PENDENTE',
+      NOW
+    );
+    expect(patch.instagramMediaId).toBeUndefined();
+    expect(patch.instagramContainerId).toBeUndefined();
+    expect(patch.childContainerIds).toEqual([]);
   });
 
   it('rejeita alvo desconhecido', () => {

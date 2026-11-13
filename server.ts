@@ -5044,6 +5044,17 @@ app.post('/api/posts/:id/organize', requireAuth, async (req: AuthenticatedReques
     return res.status(400).json({ error: err.message || 'Dados inválidos.' });
   }
   Object.assign(targetPost, patch);
+  if (target !== 'PUBLICADO') {
+    // Itens também guardam IDs da Meta; sem limpar, um novo agendamento reaproveita a publicação antiga.
+    targetPost.items = targetPost.items.map((it) => ({
+      ...it,
+      instagramMediaId: undefined,
+      instagramContainerId: undefined,
+      childContainerIds: undefined,
+      instagramPermalink: undefined,
+      publishedAt: undefined,
+    }));
+  }
   syncPostGroupStateToItemsAndMeta(targetPost);
   if (!testStateOverrideActive) {
     await upsertPostGroupToDb(targetPost);

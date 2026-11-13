@@ -1249,8 +1249,11 @@ export async function executeInstagramGraphPublish(params: {
     }
 
     // 4. Create container(s) on graph.instagram.com
-    let parentContainerId = post.instagramContainerId || '';
-    const childContainerIds: string[] = Array.isArray(post.childContainerIds)
+    // Container que já gerou uma publicação (mediaId salvo, não confirmada no perfil) não pode ser
+    // publicado de novo: cria containers novos. Reaproveitar só vale para tentativas que não publicaram.
+    const reuseContainers = !post.instagramMediaId;
+    let parentContainerId = reuseContainers ? post.instagramContainerId || '' : '';
+    const childContainerIds: string[] = reuseContainers && Array.isArray(post.childContainerIds)
       ? [...post.childContainerIds]
       : [];
     let lastContainerMetaResp: any = null;

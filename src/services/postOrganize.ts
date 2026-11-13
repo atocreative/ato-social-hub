@@ -22,6 +22,17 @@ export interface OrganizePatch {
   scheduledAccountId?: undefined;
   tipoConteudo?: ContentType;
   descricaoConteudo?: string;
+  // Estado de publicação da Meta. Ao sair de "publicado", ele precisa ser apagado,
+  // senão um novo agendamento reaproveita containers/ID antigos e gera falso positivo.
+  instagramMediaId?: undefined;
+  instagramContainerId?: undefined;
+  childContainerIds?: [];
+  instagramPermalink?: undefined;
+  publishAttempts?: 0;
+  lastAttemptAt?: undefined;
+  nextRetryAt?: null;
+  failureReason?: null;
+  publishLock?: null;
 }
 
 export function organizeTransition(
@@ -46,12 +57,26 @@ export function organizeTransition(
       publishedAt = nowIso;
     }
   }
-  return {
+  const base: OrganizePatch = {
     status: target,
     publishedAt,
     scheduledAt: undefined,
     scheduledAccountId: undefined,
     tipoConteudo: details.tipoConteudo,
     descricaoConteudo: details.descricaoConteudo?.trim() || undefined,
+  };
+  if (target === 'PUBLICADO') return base;
+  // Voltou para pendente ou "não vou postar": zera tudo que veio de uma publicação anterior.
+  return {
+    ...base,
+    instagramMediaId: undefined,
+    instagramContainerId: undefined,
+    childContainerIds: [],
+    instagramPermalink: undefined,
+    publishAttempts: 0,
+    lastAttemptAt: undefined,
+    nextRetryAt: null,
+    failureReason: null,
+    publishLock: null,
   };
 }
