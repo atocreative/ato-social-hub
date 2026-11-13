@@ -128,6 +128,14 @@ export const api = {
     });
   },
 
+  // Exclusão da própria conta (usuário logado). Exige o @username digitado como confirmação.
+  deleteAccount: async (confirmUsername: string): Promise<{ success: boolean; error?: string }> => {
+    return apiFetch('/api/account/delete', {
+      method: 'POST',
+      body: JSON.stringify({ confirmUsername }),
+    });
+  },
+
   // Obter URL oficial de autorização do Instagram OAuth 2.0
   getInstagramAuthUrl: async (
     origin?: string,
