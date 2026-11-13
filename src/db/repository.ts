@@ -544,7 +544,6 @@ export async function listInstagramAccounts(): Promise<TenantAccount[]> {
   const res = await dbQuery<any>(
     `
     SELECT * FROM instagram_accounts
-    WHERE LOWER(username) != 'caiorocha' AND LOWER(nome) != 'caio rocha'
     ORDER BY created_at DESC
     `
   );

@@ -335,12 +335,6 @@ function resolveAdminAlertsForTenant(tenantId: string) {
   }
 }
 
-function isLegacyGhostUsername(username?: string | null, nome?: string | null): boolean {
-  const cleanUser = String(username || '').replace(/^@/, '').trim().toLowerCase();
-  const cleanNome = String(nome || '').trim().toLowerCase();
-  return cleanUser === 'caiorocha' || cleanNome === 'caio rocha';
-}
-
 function applyPostGroupsMeta(groups: PostGroup[]): PostGroup[] {
   return groups.map((g) => {
     const meta = postGroupsMeta[g.id];
@@ -495,7 +489,7 @@ export async function syncStateFromPostgres(force: boolean = false): Promise<voi
   const { JWT_SECRET } = getEnv();
   const encKey = getTokenEncryptionKey();
   tenants = accountsFromDb
-    .filter((t) => Boolean(t && t.username && !isLegacyGhostUsername(t.username, t.nome)))
+    .filter((t) => Boolean(t && t.username))
     .map((t) => normalizeAndEncryptTenantToken(t, encKey || JWT_SECRET));
 
   postGroups = postsFromDb;
@@ -554,7 +548,7 @@ export async function persistStateToPostgres(): Promise<void> {
   const encKey = getTokenEncryptionKey();
 
   tenants = tenants
-    .filter((t) => Boolean(t && t.username && !isLegacyGhostUsername(t.username, t.nome)))
+    .filter((t) => Boolean(t && t.username))
     .map((t) => normalizeAndEncryptTenantToken(t, encKey || JWT_SECRET));
 
   for (const pg of postGroups) {
@@ -1638,12 +1632,6 @@ app.get('/api/auth/me', requireAuth, async (req: AuthenticatedRequest, res: Resp
   const { JWT_SECRET } = getEnv();
   const user = req.user!;
   if (user.role === 'TENANT') {
-    if (isLegacyGhostUsername(user.instagramUsername, user.nome)) {
-      return res.status(401).json({
-        error: 'Sessão antiga inválida. Faça login novamente.',
-      });
-    }
-
     let tenant = tenants.find(
       (t) =>
         (user.tenantId && t.id === user.tenantId) ||
@@ -1660,7 +1648,7 @@ app.get('/api/auth/me', requireAuth, async (req: AuthenticatedRequest, res: Resp
     // garante que a conta exista no .data/database.json local
     if (!tenant && user.instagramUsername) {
       const cleanUser = user.instagramUsername.replace(/^@/, '').trim();
-      if (cleanUser && !isLegacyGhostUsername(cleanUser, user.nome)) {
+      if (cleanUser) {
         tenant = {
           id: user.tenantId || `tenant_${cleanUser}_${Date.now()}`,
           username: cleanUser,
@@ -1753,7 +1741,7 @@ app.post('/api/auth/instagram/sync-session', requireAuth, async (req: Authentica
     .trim();
   const rawNome = String(ticketPayload?.nome || bodyTenant.nome || user.nome || rawUsername).trim();
 
-  if (!rawUsername || isLegacyGhostUsername(rawUsername, rawNome)) {
+  if (!rawUsername) {
     return res.status(400).json({ error: 'Conta inválida para sincronização.' });
   }
 

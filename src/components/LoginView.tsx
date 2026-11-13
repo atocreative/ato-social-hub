@@ -38,21 +38,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigate
       if (event.data.type === 'INSTAGRAM_AUTH_SUCCESS') {
         const { token, user, tenant, syncTicket } = event.data;
         if (token && user) {
-          const cleanUser = String(user.instagramUsername || '')
-            .replace(/^@/, '')
-            .trim()
-            .toLowerCase();
-          const cleanNome = String(user.nome || '').trim().toLowerCase();
-          if (cleanUser === 'caiorocha' || cleanNome === 'caio rocha') {
-            localStorage.clear();
-            sessionStorage.clear();
-            authStorage.clearSession();
-            setErrorMessage(
-              'A resposta de login veio de uma versão antiga publicada no domínio ato-social-hub.ai.studio. Publique (Deploy) a versão atualizada do app para remover o fallback antigo.'
-            );
-            return;
-          }
-
           localStorage.clear();
           sessionStorage.clear();
           authStorage.clearSession();

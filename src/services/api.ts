@@ -25,16 +25,6 @@ export const authStorage = {
         localStorage.removeItem(USER_KEY);
         return null;
       }
-      const cleanUser = String(parsed?.instagramUsername || '')
-        .replace(/^@/, '')
-        .trim()
-        .toLowerCase();
-      const cleanNome = String(parsed?.nome || '').trim().toLowerCase();
-      if (cleanUser === 'caiorocha' || cleanNome === 'caio rocha') {
-        localStorage.clear();
-        sessionStorage.clear();
-        return null;
-      }
       return parsed;
     } catch {
       localStorage.removeItem(USER_KEY);

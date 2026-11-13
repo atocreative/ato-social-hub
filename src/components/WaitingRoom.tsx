@@ -28,18 +28,6 @@ export const WaitingRoom: React.FC<WaitingRoomProps> = ({
 
   // Garante que a conta autenticada esteja sincronizada caso tenha vindo de OAuth
   useEffect(() => {
-    const cleanUser = String(user.instagramUsername || '')
-      .replace(/^@/, '')
-      .trim()
-      .toLowerCase();
-    const cleanNome = String(user.nome || '').trim().toLowerCase();
-    if (cleanUser === 'caiorocha' || cleanNome === 'caio rocha') {
-      localStorage.clear();
-      sessionStorage.clear();
-      authStorage.clearSession();
-      onLogout();
-      return;
-    }
     if (!isPlaceholderHandle) {
       api.syncInstagramSession({ user }).catch(() => {});
     }
