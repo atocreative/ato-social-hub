@@ -7,7 +7,12 @@ import {
   recordPublicationAttemptAndOutcomeInDb,
 } from '../db/repository.ts';
 import { DriveImageItem, PostGroup, PostStatus, TenantAccount, UserProfile } from '../types/index.ts';
-import { executeInstagramGraphPublish } from './instagramCore.ts';
+import {
+  executeInstagramGraphPublish,
+  confirmMediaOnAccount,
+  loginModeForTenant,
+  resolveAccountAccessToken,
+} from './instagramCore.ts';
 import { TokenService } from './TokenService.ts';
 
 // Cache em memória dos buffers de imagens baixadas do Google Drive (quando o processo web também serve o media-proxy)
@@ -421,7 +426,20 @@ export class PublicationService {
 
     const finishedIso = new Date().toISOString();
 
-    if (publishRes.ok && publishRes.instagramMediaId) {
+    // Agendador: só marca como publicado se o Instagram mostrar a mídia no perfil.
+    // Antes, a resposta da Meta bastava, e o post aparecia "publicado" sem estar no perfil.
+    let notConfirmedOnAccount = false;
+    if (origin === 'SCHEDULER' && publishRes.ok && publishRes.instagramMediaId) {
+      const confirmed = await confirmMediaOnAccount({
+        loginMode: loginModeForTenant(tenant),
+        igUserId: String(tenant.instagramUserId || tenant.id || '').trim(),
+        accessToken: resolveAccountAccessToken(tenant, encKey),
+        mediaId: publishRes.instagramMediaId,
+      });
+      notConfirmedOnAccount = !confirmed;
+    }
+
+    if (publishRes.ok && publishRes.instagramMediaId && !notConfirmedOnAccount) {
       const updatedItems = targetPost.items.map((item) => ({
         ...item,
         status: 'PUBLICADO' as const,
@@ -483,7 +501,9 @@ export class PublicationService {
     }
 
     // Tratamento de falha (Erro 190 de autenticação vs erro transitório vs erro permanente)
-    const errMsg = publishRes.errorMessage || 'Falha ao publicar conteúdo na API do Instagram.';
+    const errMsg = notConfirmedOnAccount
+      ? 'A Meta aceitou a publicação, mas a mídia não apareceu no perfil. Não foi marcada como publicada; confira a conta e reagende.'
+      : publishRes.errorMessage || 'Falha ao publicar conteúdo na API do Instagram.';
     const isError190 = publishRes.status === 'AUTH_ERROR_190';
     const isTransientError = publishRes.status === 'TRANSIENT_ERROR';
 

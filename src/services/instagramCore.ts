@@ -1553,3 +1553,41 @@ export async function executeInstagramGraphPublish(params: {
     inFlightPostPublishes.delete(post.id);
   }
 }
+
+/**
+ * Confirma que a mídia publicada aparece de fato na lista do perfil.
+ * A Meta pode levar alguns segundos para listar a mídia, então tenta algumas vezes.
+ * Usado no agendador para não marcar como publicado algo que o Instagram não mostra.
+ */
+export async function confirmMediaOnAccount(params: {
+  loginMode?: IgLoginMode;
+  igUserId: string;
+  accessToken: string;
+  mediaId: string;
+  attempts?: number;
+  delayMs?: number;
+}): Promise<boolean> {
+  const fetchFn = getInstagramFetch();
+  const attempts = Math.max(1, params.attempts ?? 4);
+  const delayMs = params.delayMs ?? 5000;
+  const url = `${igGraphBase(params.loginMode)}/${encodeURIComponent(
+    params.igUserId
+  )}/media?fields=id&limit=25&access_token=${encodeURIComponent(params.accessToken)}`;
+
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const resp = await fetchFn(url, { method: 'GET' });
+      if (resp.ok) {
+        const data: any = await resp.json().catch(() => ({}));
+        const list: any[] = Array.isArray(data?.data) ? data.data : [];
+        if (list.some((m) => String(m?.id) === String(params.mediaId))) return true;
+      }
+    } catch {
+      // tenta de novo
+    }
+    if (i < attempts - 1 && delayMs > 0) {
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  return false;
+}
