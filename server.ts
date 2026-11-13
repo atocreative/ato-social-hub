@@ -2902,6 +2902,11 @@ app.get('/api/auth/instagram/callback', async (req: Request, res: Response) => {
     // Etapa 1.5 — Token de longa duração.
     // Login unificado: o token de usuário de sistema já vem com validade definida pela configuração (sem ig_exchange_token).
     // Login do Instagram antigo: troca ig_exchange_token para token de 60 dias.
+    // Correção: o código de troca do login unificado é um token CURTO (~1h). Antes ele era
+    // gravado direto como "longa duração" de 60 dias, e expirava/era recusado pela Meta na
+    // publicação (erro 190). Agora ambos os fluxos convertem via ig_exchange_token.
+    // Se a conversão falhar, exchangeShortForLongLivedInstagramToken devolve o token curto
+    // com validade real de 1h, então a conta é marcada corretamente para reconexão.
     const longLivedExchange: {
       ok: boolean;
       accessToken: string;
@@ -2910,17 +2915,7 @@ app.get('/api/auth/instagram/callback', async (req: Request, res: Response) => {
       tokenIssuedAt: string;
       tokenExpiresAt: string;
       errorMessage?: string;
-    } =
-      cbLoginMode === 'unified'
-        ? {
-            ok: true,
-            accessToken: shortLivedToken,
-            tokenType: UNIFIED_TOKEN_TYPE,
-            expiresInSeconds: unifiedExpiresInSeconds,
-            tokenIssuedAt: new Date().toISOString(),
-            tokenExpiresAt: new Date(Date.now() + unifiedExpiresInSeconds * 1000).toISOString(),
-          }
-        : await exchangeShortForLongLivedInstagramToken({ shortLivedToken, clientSecret });
+    } = await exchangeShortForLongLivedInstagramToken({ shortLivedToken, clientSecret });
     const finalAccessToken = longLivedExchange.accessToken;
     const encryptedAccessToken = encryptInstagramToken(finalAccessToken, encKey || JWT_SECRET);
 
