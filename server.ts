@@ -109,6 +109,10 @@ import {
 } from './src/db/repository.ts';
 import { migrateFromJsonToPostgres } from './src/db/migrateFromJson.ts';
 import {
+  validateDeletionRequest,
+  buildDeletionAuditEntry,
+} from './src/services/accountDeletion.ts';
+import {
   generateCaptionWithGemini,
   getGeminiConfigStatus,
 } from './src/services/geminiCaptionService.ts';
@@ -1702,6 +1706,50 @@ app.get('/api/auth/me', requireAuth, async (req: AuthenticatedRequest, res: Resp
   }
   const { encryptedAccessToken: _omitAdminEnc, ...safeAdminUser } = user as any;
   return res.json({ user: safeAdminUser });
+});
+
+// B1b. Exclusão da própria conta pelo usuário (TENANT), com confirmação e auditoria.
+// Remove dados e tokens do app; NUNCA remove a conta no Instagram.
+app.post('/api/account/delete', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  const user = req.user!;
+  if (user.role !== 'TENANT') {
+    return res.status(403).json({ error: 'Apenas contas de usuário podem excluir a própria conta.' });
+  }
+  const validation = validateDeletionRequest({
+    sessionUsername: String(user.instagramUsername || ''),
+    confirmUsername: String(req.body?.confirmUsername || ''),
+  });
+  if (!validation.ok) {
+    return res.status(400).json({ error: 'Confirmação não confere com a conta.' });
+  }
+
+  const tenant = tenants.find(
+    (t) =>
+      (user.tenantId && t.id === user.tenantId) ||
+      (user.instagramUserId && t.instagramUserId === user.instagramUserId) ||
+      (user.instagramUsername &&
+        t.username.toLowerCase() === user.instagramUsername.toLowerCase())
+  );
+  const tenantId = tenant?.id || user.tenantId || '';
+
+  fs.appendFileSync(
+    path.join(__dirname, '.data', 'account-deletions.log'),
+    buildDeletionAuditEntry({
+      username: String(user.instagramUsername || ''),
+      tenantId,
+      ip: String(req.ip || ''),
+      at: new Date().toISOString(),
+    })
+  );
+
+  if (tenant) {
+    tenants = tenants.filter((t) => t.id !== tenant.id);
+    saveDatabaseToDisk();
+  }
+  if (tenantId) {
+    await deleteInstagramAccountFromDb(tenantId).catch(() => false);
+  }
+  return res.json({ success: true });
 });
 
 // B2. Sincronizar conta autenticada via popup OAuth entre domínios (garante persistência imediata no PostgreSQL sem expor token ao frontend)
