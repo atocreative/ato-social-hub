@@ -1793,7 +1793,7 @@ app.post('/api/auth/instagram/sync-session', requireAuth, async (req: Authentica
       accountType: ticketPayload?.accountType || bodyTenant.account_type || targetTenant?.account_type,
       avatarUrl: ticketPayload?.avatarUrl || bodyTenant.avatarUrl || targetTenant?.avatarUrl,
       encryptedAccessToken: incomingEncryptedToken,
-      tokenType: 'LONG_LIVED',
+      tokenType: (ticketPayload as any)?.tokenType || 'LONG_LIVED',
       tokenIssuedAt: incomingIssuedAt,
       tokenExpiresAt: incomingExpiresAt,
       grantedScopes: incomingScopes,
@@ -1824,7 +1824,7 @@ app.post('/api/auth/instagram/sync-session', requireAuth, async (req: Authentica
       driveFolderId: incomingFolderId,
       requestedAt: new Date().toISOString(),
       encryptedAccessToken: incomingEncryptedToken,
-      tokenType: 'LONG_LIVED',
+      tokenType: (ticketPayload as any)?.tokenType || 'LONG_LIVED',
       tokenIssuedAt: incomingIssuedAt || new Date().toISOString(),
       tokenExpiresAt: incomingExpiresAt,
       grantedScopes: incomingScopes,
@@ -1835,7 +1835,7 @@ app.post('/api/auth/instagram/sync-session', requireAuth, async (req: Authentica
   } else {
     if (incomingEncryptedToken) {
       targetTenant.encryptedAccessToken = incomingEncryptedToken;
-      targetTenant.tokenType = 'LONG_LIVED';
+      targetTenant.tokenType = (ticketPayload as any)?.tokenType || targetTenant.tokenType || 'LONG_LIVED';
       targetTenant.tokenIssuedAt =
         incomingIssuedAt || targetTenant.tokenIssuedAt || new Date().toISOString();
       targetTenant.tokenExpiresAt = incomingExpiresAt || targetTenant.tokenExpiresAt;
@@ -3330,6 +3330,8 @@ app.get('/api/auth/instagram/callback', async (req: Request, res: Response) => {
     // O token criptografado fica somente no servidor; o navegador recebe apenas um ticket opaco de uso único.
     const syncTicket = issueSyncTicket({
       tenantId: targetTenant!.id,
+      // Preserva o tipo do token (UNIFIED_BISU): ele define o host da Graph API na publicação.
+      tokenType: longLivedExchange.tokenType,
       username: targetTenant!.username,
       nome: targetTenant!.nome,
       instagramUserId: targetTenant!.instagramUserId,
