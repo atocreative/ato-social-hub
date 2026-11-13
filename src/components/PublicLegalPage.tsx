@@ -10,56 +10,10 @@ interface PublicLegalPageProps {
 }
 
 export const PublicLegalPage: React.FC<PublicLegalPageProps> = ({ route, onNavigate }) => {
-  const [deletionIdentifier, setDeletionIdentifier] = useState('');
-  const [deletionStatus, setDeletionStatus] = useState<{
-    type: 'success' | 'info' | 'error';
-    message: string;
-    confirmationCode?: string;
-  } | null>(null);
-  const [submittingDeletion, setSubmittingDeletion] = useState(false);
 
   const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, path: string) => {
     e.preventDefault();
     onNavigate(path);
-  };
-
-  const handleRequestDeletion = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const clean = deletionIdentifier.trim().replace(/^@/, '');
-    if (!clean) return;
-
-    setSubmittingDeletion(true);
-    setDeletionStatus(null);
-    try {
-      const resp = await fetch('/api/public/data-deletion', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: clean }),
-      });
-      const data = await resp.json().catch(() => ({}));
-      if (resp.ok) {
-        setDeletionStatus({
-          type: 'success',
-          message:
-            data.message ||
-            `Solicitação concluída. Todos os tokens, histórico e vínculos da conta @${clean} foram removidos do banco de dados.`,
-          confirmationCode: data.confirmationCode,
-        });
-        setDeletionIdentifier('');
-      } else {
-        setDeletionStatus({
-          type: 'error',
-          message: data.error || 'Não foi possível processar a solicitação no momento.',
-        });
-      }
-    } catch {
-      setDeletionStatus({
-        type: 'error',
-        message: 'Erro de conexão ao processar a exclusão.',
-      });
-    } finally {
-      setSubmittingDeletion(false);
-    }
   };
 
   return (
@@ -437,58 +391,18 @@ export const PublicLegalPage: React.FC<PublicLegalPageProps> = ({ route, onNavig
                 </li>
               </ol>
             </section>
-
-            {/* Passo 2: Exclusão Imediata no Painel / Formulário Automático */}
-            <section className="p-5 rounded-xl bg-[#0A0A0A] border border-[#242424] space-y-4">
-              <div>
-                <h2 className="text-base font-semibold text-white">
-                  Opção 2: Exclusão Total Imediata pelo Painel ou Formulário Direto
-                </h2>
-                <p className="text-xs text-[#8E8E93] mt-1">
-                  No painel do ATO Social Hub, você pode utilizar o botão de exclusão da conta ou informar seu{' '}
-                  <code className="font-mono text-[#10B981]">@username</code> ou ID do Instagram abaixo para apagar
-                  imediatamente seus tokens OAuth, cadastro e histórico do nosso banco de dados:
-                </p>
-              </div>
-
-              <form onSubmit={handleRequestDeletion} className="flex flex-col sm:flex-row gap-3">
-                <input
-                  type="text"
-                  required
-                  value={deletionIdentifier}
-                  onChange={(e) => setDeletionIdentifier(e.target.value)}
-                  placeholder="Digite seu @username ou ID da conta do Instagram"
-                  className="flex-1 bg-[#121212] border border-[#2A2A2A] focus:border-[#10B981] rounded-lg px-3.5 py-2.5 text-xs text-white placeholder-[#5E5E62] outline-none"
-                />
-                <button
-                  type="submit"
-                  disabled={submittingDeletion}
-                  className="px-4 py-2.5 bg-[#EF4444] hover:bg-[#DC2626] text-white font-semibold text-xs rounded-lg transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
-                >
-                  {submittingDeletion ? 'Excluindo Dados...' : 'Excluir Meus Dados Agora'}
-                </button>
-              </form>
-
-              {deletionStatus && (
-                <div
-                  className={`p-3.5 rounded-lg border text-xs flex items-start gap-2.5 ${
-                    deletionStatus.type === 'success'
-                      ? 'bg-[#10B981]/10 border-[#10B981]/40 text-[#10B981]'
-                      : 'bg-red-950/30 border-[#EF4444]/40 text-[#EF4444]'
-                  }`}
-                >
-                  <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-                  <div className="space-y-1">
-                    <p>{deletionStatus.message}</p>
-                    {deletionStatus.confirmationCode && (
-                      <p className="font-mono text-[11px] text-white">
-                        Código de Confirmação de Exclusão: {deletionStatus.confirmationCode}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
+            {/* Passo 2: Exclusão pelo painel (somente com login) */}
+            <section className="p-5 rounded-xl bg-[#0A0A0A] border border-[#242424] space-y-3">
+              <h2 className="text-base font-semibold text-white">
+                Opção 2: Exclusão pelo painel (somente com login)
+              </h2>
+              <p className="text-sm text-[#D1D1D6] leading-relaxed">
+                Usuários conectados podem excluir a própria conta em <strong>Conta &gt; Excluir minha conta</strong>, dentro do painel.
+                Essa ação exige login com a conta do Instagram e a confirmação do próprio @username.
+                Por segurança, esta página pública não executa exclusões.
+              </p>
             </section>
+
 
             {/* Passo 3: Solicitação via E-mail */}
             <section className="p-5 rounded-xl bg-[#0A0A0A] border border-[#242424] space-y-3">

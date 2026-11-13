@@ -2498,8 +2498,10 @@ app.get('/api/instagram/oauth-diagnostics', (_req: Request, res: Response) => {
 });
 
 // C2. Exclusão Pública de Dados do Usuário (Meta App Review Data Deletion Requirement)
+// Rota pública /api/public/data-deletion REMOVIDA: apagava conta só com o @username, sem autenticação.
+// O webhook da Meta continua aqui; ainda precisa validar o signed_request (pendente de decisão).
 app.post(
-  ['/api/public/data-deletion', '/api/webhooks/meta/data-deletion'],
+  ['/api/webhooks/meta/data-deletion'],
   (req: Request, res: Response) => {
     loadDatabaseFromDisk();
     const rawIdentifier = String(
