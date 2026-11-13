@@ -20,9 +20,23 @@ interface PostCardProps {
   onDelete?: (post: PostGroup) => void;
   onHide?: (post: PostGroup) => void;
   onUnhide?: (post: PostGroup) => void;
+  /** 'clean' mostra só o essencial: status, data e resolução. O admin usa 'default'. */
+  variant?: 'default' | 'clean';
+  /** Ações extras no menu de 3 pontinhos (ex.: marcar como publicado). */
+  extraMenuActions?: { label: string; onClick: () => void; tone?: 'default' | 'danger' }[];
 }
 
-export const PostCard: React.FC<PostCardProps> = ({ post, onApprove, onReject, onDelete, onHide, onUnhide }) => {
+export const PostCard: React.FC<PostCardProps> = ({
+  post,
+  onApprove,
+  onReject,
+  onDelete,
+  onHide,
+  onUnhide,
+  variant = 'default',
+  extraMenuActions = [],
+}) => {
+  const isClean = variant === 'clean';
   const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [isLightboxOpen, setIsLightboxOpen] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -108,7 +122,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onApprove, onReject, o
                   : 'Post único'}
               </span>
               <span>·</span>
-              <span className="font-mono tabular-nums">{formatDateTimeBR(post.dataCriacao)}</span>
+              {!isClean && <span className="font-mono tabular-nums">{formatDateTimeBR(post.dataCriacao)}</span>}
 
               {post.isDeletedByClient ? (
                 <>
@@ -184,6 +198,22 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onApprove, onReject, o
                   <Eye className="w-3.5 h-3.5 text-[#10B981]" />
                   <span>Visualizar</span>
                 </button>
+
+                {extraMenuActions.map((action) => (
+                  <button
+                    key={action.label}
+                    type="button"
+                    onClick={() => {
+                      setIsMenuOpen(false);
+                      action.onClick();
+                    }}
+                    className={`w-full px-3 py-2 text-left text-xs hover:bg-[#242424] flex items-center gap-2 cursor-pointer transition-colors border-t border-[#262626] ${
+                      action.tone === 'danger' ? 'text-[#EF4444]' : 'text-white'
+                    }`}
+                  >
+                    <span>{action.label}</span>
+                  </button>
+                ))}
 
                 {post.isDeletedByClient ? (
                   onUnhide && (
@@ -329,7 +359,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onApprove, onReject, o
             {post.scheduledAt && post.status !== 'PUBLICADO' && (
               <div className="flex items-center justify-between text-[#F59E0B] font-mono">
                 <span>Agendado (SP): {formatDateTimeBR(post.scheduledAt)}</span>
-                {post.publishAttempts ? (
+                {!isClean && post.publishAttempts ? (
                   <span className="text-[#8E8E93]">Tentativas: {post.publishAttempts}</span>
                 ) : null}
               </div>
@@ -349,7 +379,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onApprove, onReject, o
                 )}
               </div>
             )}
-            {post.failureReason && post.status !== 'PUBLICADO' && (
+            {!isClean && post.failureReason && post.status !== 'PUBLICADO' && (
               <div className="text-[#EF4444] break-words">
                 {post.failureReason}
               </div>
@@ -358,7 +388,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onApprove, onReject, o
         )}
 
         {/* Rejection Feedback Details if Reprovado */}
-        {post.rejectionFeedback && (
+        {!isClean && post.rejectionFeedback && (
           <div className="px-4 py-3 bg-[#161111] border-t border-[#331C1C] text-xs space-y-1.5">
             <div className="text-[11px] text-[#EF4444] font-medium">Feedback de Reprovação</div>
             {post.rejectionFeedback.tags && post.rejectionFeedback.tags.length > 0 && (
@@ -385,7 +415,7 @@ export const PostCard: React.FC<PostCardProps> = ({ post, onApprove, onReject, o
         )}
 
         {/* Caption Preview */}
-        {post.caption && (
+        {!isClean && post.caption && (
           <div className="px-4 py-2 bg-[#0E0E0E] border-t border-[#242424] text-xs text-[#8E8E93] truncate">
             {post.caption}
           </div>

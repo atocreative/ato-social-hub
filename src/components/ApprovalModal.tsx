@@ -29,6 +29,8 @@ interface ApprovalModalProps {
   onClose: () => void;
   onConfirmPublish: (post: PostGroup, payload: InstagramPublishPayload) => Promise<void>;
   onPublishInstagramNow?: (post: PostGroup, caption: string, accountId?: string) => Promise<void>;
+  /** Mostra os controles de legenda gerada por IA. A área do usuário usa legenda manual. */
+  allowAiCaption?: boolean;
 }
 
 export const ApprovalModal: React.FC<ApprovalModalProps> = ({
@@ -37,6 +39,7 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
   onClose,
   onConfirmPublish,
   onPublishInstagramNow,
+  allowAiCaption = true,
 }) => {
   const clientName =
     post.pastaClienteNome ||
@@ -555,7 +558,7 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
                     <span>Incluir hashtags estratégicas na legenda</span>
                   </label>
 
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2" hidden={!allowAiCaption}>
                     <button
                       type="button"
                       onClick={() => handleGenerateCaption(false)}

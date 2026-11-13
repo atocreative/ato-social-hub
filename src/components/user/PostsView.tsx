@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
-import { MoreVertical } from 'lucide-react';
-import type { PostGroup } from '../../types/index.ts';
-import { filterPosts } from '../../utils/postHelpers.ts';
+import type { PostGroup, InstagramPublishPayload } from '../../types/index.ts';
+import { filterPosts, type CategoryFilter, type MediaFilter } from '../../utils/postHelpers.ts';
 import { api } from '../../services/api.ts';
-import type { OrganizeTarget } from '../../services/postOrganize.ts';
-import { formatDateTime, statusLabel, thumbnailOf } from './format.ts';
+import { PostCard } from '../PostCard.tsx';
+import { ApprovalModal } from '../ApprovalModal.tsx';
+import { RejectionModal } from '../RejectionModal.tsx';
 
 type Tab = 'TODOS' | 'PENDENTES' | 'AGENDADOS' | 'PUBLICADOS' | 'NAO_VOU_POSTAR' | 'REPROVADOS';
 
@@ -17,53 +17,86 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'REPROVADOS', label: 'Reprovados' },
 ];
 
+const CATEGORIES: CategoryFilter[] = ['TODOS', 'Post Único', 'Carrossel', 'Story', 'Vídeos'];
+const MEDIA: { id: MediaFilter; label: string }[] = [
+  { id: 'TODOS', label: 'Todos os formatos' },
+  { id: 'IMAGENS', label: 'Imagens' },
+  { id: 'VIDEOS', label: 'Vídeos' },
+];
+
 interface PostsViewProps {
   posts: PostGroup[];
-  /** Chamado após organizar um post, para recarregar a lista. */
-  onOrganized: () => void;
+  onChanged: () => void;
+  onConfirmPublish: (post: PostGroup, payload: InstagramPublishPayload) => Promise<void>;
+  onPublishInstagramNow: (post: PostGroup, caption: string, accountId?: string) => Promise<void>;
+  onConfirmReject: (
+    post: PostGroup,
+    feedback: { tags: string[]; motivo: string; pastaClienteId?: string }
+  ) => Promise<void>;
+  onHide: (post: PostGroup) => Promise<void>;
+  onUnhide: (post: PostGroup) => Promise<void>;
 }
 
-export const PostsView: React.FC<PostsViewProps> = ({ posts, onOrganized }) => {
+export const PostsView: React.FC<PostsViewProps> = ({
+  posts,
+  onChanged,
+  onConfirmPublish,
+  onPublishInstagramNow,
+  onConfirmReject,
+  onHide,
+  onUnhide,
+}) => {
   const [tab, setTab] = useState<Tab>('TODOS');
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [busyId, setBusyId] = useState<string | null>(null);
+  const [category, setCategory] = useState<CategoryFilter>('TODOS');
+  const [media, setMedia] = useState<MediaFilter>('TODOS');
+  const [approving, setApproving] = useState<PostGroup | null>(null);
+  const [rejecting, setRejecting] = useState<PostGroup | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const list = useMemo(() => {
-    if (tab === 'NAO_VOU_POSTAR') return posts.filter((p) => p.status === 'NAO_VOU_POSTAR');
-    return filterPosts(posts, tab);
-  }, [posts, tab]);
+    const base = filterPosts(posts, tab === 'NAO_VOU_POSTAR' ? 'TODOS' : tab, '', undefined, category, media);
+    return tab === 'NAO_VOU_POSTAR' ? base.filter((p) => p.status === 'NAO_VOU_POSTAR') : base;
+  }, [posts, tab, category, media]);
 
-  const organize = async (post: PostGroup, target: OrganizeTarget) => {
-    setOpenMenuId(null);
-    setBusyId(post.id);
+  const organize = async (post: PostGroup, target: 'PUBLICADO' | 'NAO_VOU_POSTAR' | 'PENDENTE') => {
     setError(null);
     try {
       const res = await api.organizePost(post.id, target);
       if (!res.success) throw new Error(res.error || 'Não foi possível alterar o post.');
-      onOrganized();
+      onChanged();
     } catch (err: any) {
       setError(err.message || 'Não foi possível alterar o post.');
-    } finally {
-      setBusyId(null);
     }
   };
 
-  const menuActions = (post: PostGroup): { target: OrganizeTarget; label: string }[] => {
-    const actions: { target: OrganizeTarget; label: string }[] = [];
-    if (post.status !== 'PUBLICADO') actions.push({ target: 'PUBLICADO', label: 'Marcar como publicado' });
-    if (post.status !== 'NAO_VOU_POSTAR') actions.push({ target: 'NAO_VOU_POSTAR', label: 'Não vou postar' });
+  const extraActionsFor = (post: PostGroup) => {
+    const actions: { label: string; onClick: () => void }[] = [];
+    if (post.status !== 'PUBLICADO') {
+      actions.push({ label: 'Marcar como publicado', onClick: () => organize(post, 'PUBLICADO') });
+    }
+    if (post.status !== 'NAO_VOU_POSTAR') {
+      actions.push({ label: 'Não vou postar', onClick: () => organize(post, 'NAO_VOU_POSTAR') });
+    }
     if (post.status === 'PUBLICADO' || post.status === 'NAO_VOU_POSTAR') {
-      actions.push({ target: 'PENDENTE', label: 'Voltar para pendentes' });
+      actions.push({ label: 'Voltar para pendentes', onClick: () => organize(post, 'PENDENTE') });
     }
     return actions;
   };
 
+  const handleHide = async (post: PostGroup) => {
+    setError(null);
+    try {
+      await onHide(post);
+    } catch (err: any) {
+      setError(err.message || 'Não foi possível apagar o post do painel.');
+    }
+  };
+
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-6 max-w-6xl">
       <header>
         <h1 className="text-2xl font-bold">Posts</h1>
-        <p className="text-sm text-[#8E8E93] mt-1">Organize suas publicações por etapa.</p>
+        <p className="text-sm text-[#8E8E93] mt-1">Aprove, agende, reprove e organize suas publicações.</p>
       </header>
 
       <div className="flex flex-wrap gap-2">
@@ -83,6 +116,35 @@ export const PostsView: React.FC<PostsViewProps> = ({ posts, onOrganized }) => {
         ))}
       </div>
 
+      <div className="flex flex-wrap gap-3 items-center">
+        <div className="flex flex-wrap gap-1.5">
+          {CATEGORIES.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setCategory(c)}
+              className={`px-2.5 py-1 rounded-md text-[11px] border cursor-pointer ${
+                category === c ? 'border-white/40 text-white' : 'border-[#242424] text-[#8E8E93] hover:text-white'
+              }`}
+            >
+              {c === 'TODOS' ? 'Todos os tipos' : c}
+            </button>
+          ))}
+        </div>
+        <select
+          aria-label="Formato"
+          value={media}
+          onChange={(e) => setMedia(e.target.value as MediaFilter)}
+          className="bg-[#0A0A0A] border border-[#242424] rounded-md px-2 py-1 text-[11px] text-white outline-none"
+        >
+          {MEDIA.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {error && (
         <div className="p-3 bg-red-950/30 border border-[#EF4444]/40 rounded-lg text-[#EF4444] text-xs">
           {error}
@@ -94,54 +156,40 @@ export const PostsView: React.FC<PostsViewProps> = ({ posts, onOrganized }) => {
           Nenhum post nesta lista.
         </p>
       ) : (
-        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {list.map((p) => {
-            const thumb = thumbnailOf(p);
-            const actions = menuActions(p);
-            const open = openMenuId === p.id;
-            return (
-              <li key={p.id} className="relative flex gap-4 bg-[#121212] border border-[#242424] rounded-2xl p-4">
-                {thumb ? (
-                  <img src={thumb} alt="" className="w-16 h-16 rounded-lg object-cover bg-[#1A1A1A] shrink-0" />
-                ) : (
-                  <div className="w-16 h-16 rounded-lg bg-[#1A1A1A] shrink-0" />
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate pr-8">{p.nome}</p>
-                  <p className="text-xs text-[#8E8E93] mt-1">
-                    {formatDateTime(p.scheduledAt || p.publishedAt || p.dataCriacao)}
-                  </p>
-                  <p className="text-[11px] text-[#10B981] mt-2">{statusLabel(p.status)}</p>
-                </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+          {list.map((p) => (
+            <PostCard
+              key={p.id}
+              post={p}
+              variant="clean"
+              onApprove={(post) => setApproving(post)}
+              onReject={(post) => setRejecting(post)}
+              onHide={tab === 'NAO_VOU_POSTAR' ? handleHide : undefined}
+              onUnhide={onUnhide}
+              extraMenuActions={extraActionsFor(p)}
+            />
+          ))}
+        </div>
+      )}
 
-                <button
-                  type="button"
-                  aria-label="Opções do post"
-                  disabled={busyId === p.id}
-                  onClick={() => setOpenMenuId(open ? null : p.id)}
-                  className="absolute top-3 right-3 p-1.5 rounded-lg bg-[#1A1A1A] hover:bg-[#242424] border border-[#2A2A2A] text-[#8E8E93] hover:text-white cursor-pointer disabled:opacity-50"
-                >
-                  <MoreVertical className="w-4 h-4" />
-                </button>
+      {approving && (
+        <ApprovalModal
+          post={approving}
+          isOpen={!!approving}
+          onClose={() => setApproving(null)}
+          onConfirmPublish={onConfirmPublish}
+          onPublishInstagramNow={onPublishInstagramNow}
+          allowAiCaption={false}
+        />
+      )}
 
-                {open && (
-                  <div className="absolute right-3 top-12 w-52 bg-[#181818] border border-[#2A2A2A] rounded-lg shadow-2xl py-1 z-30">
-                    {actions.map((a) => (
-                      <button
-                        key={a.target}
-                        type="button"
-                        onClick={() => organize(p, a.target)}
-                        className="w-full px-3 py-2 text-left text-xs text-white hover:bg-[#242424] cursor-pointer"
-                      >
-                        {a.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+      {rejecting && (
+        <RejectionModal
+          post={rejecting}
+          isOpen={!!rejecting}
+          onClose={() => setRejecting(null)}
+          onConfirmReject={onConfirmReject}
+        />
       )}
     </div>
   );

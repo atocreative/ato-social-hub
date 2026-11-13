@@ -52,7 +52,8 @@ export const RejectionModal: React.FC<RejectionModalProps> = ({
     );
   };
 
-  const isFormValid = motivo.trim().length > 0;
+  // Motivo opcional: reprovar rápido não deve ser travado por texto obrigatório
+  const isFormValid = true;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -136,7 +137,7 @@ export const RejectionModal: React.FC<RejectionModalProps> = ({
           {/* 2. Campo de Texto Obrigatório (motivo) */}
           <div>
             <label htmlFor="rejection-motivo" className="block text-xs text-[#8E8E93] mb-1.5">
-              Motivo da reprovação <span className="text-[#EF4444]">*</span>
+              Motivo da reprovação <span className="text-[#8E8E93]">(opcional)</span>
             </label>
             <textarea
               id="rejection-motivo"
@@ -147,7 +148,6 @@ export const RejectionModal: React.FC<RejectionModalProps> = ({
                 if (error) setError(null);
               }}
               placeholder="Descreva rapidamente o que não ficou bom (Ex: Não gostei da posição da logo e as cores estão muito fortes)..."
-              required
               className="w-full bg-[#0A0A0A] border border-[#242424] focus:border-[#EF4444] rounded-lg p-3 text-xs text-white placeholder-[#555555] outline-none resize-none leading-relaxed"
             />
           </div>

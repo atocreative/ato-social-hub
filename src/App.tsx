@@ -379,6 +379,24 @@ export default function App() {
     }
   };
 
+  // Área do usuário: reprovar continua alimentando a memória (rejectPost) e depois
+  // leva o post para "Não vou postar", em vez de ficar só como reprovado.
+  const handleUserReject = async (
+    post: PostGroup,
+    feedback: { tags: string[]; motivo: string; pastaClienteId?: string }
+  ) => {
+    await handleConfirmReject(post, feedback);
+    await api.organizePost(post.id, 'NAO_VOU_POSTAR');
+    await loadPosts();
+  };
+
+  // Área do usuário: apagar do sistema = ocultar do painel (restaurável). Não apaga no Instagram.
+  const handleUserHide = async (post: PostGroup) => {
+    const res = await api.hidePost(post.id);
+    showNotification('success', res.message || 'Post apagado do seu painel.');
+    await loadPosts();
+  };
+
   const handleSyncDriveNow = async () => {
     setSyncingDrive(true);
     showNotification('info', 'Atualizando conteúdos...');
@@ -543,7 +561,17 @@ export default function App() {
     return (
       <UserLayout user={user} view={userView} onChangeView={setUserView} onLogout={handleLogout}>
         {userView === 'dashboard' && <UserDashboard posts={posts} />}
-        {userView === 'posts' && <PostsView posts={posts} onOrganized={loadPosts} />}
+        {userView === 'posts' && (
+          <PostsView
+            posts={posts}
+            onChanged={loadPosts}
+            onConfirmPublish={handleConfirmPublish}
+            onPublishInstagramNow={handlePublishInstagramNow}
+            onConfirmReject={handleUserReject}
+            onHide={handleUserHide}
+            onUnhide={handleUnhidePost}
+          />
+        )}
         {userView === 'agenda' && <AgendaView posts={posts} />}
         {userView === 'memoria' && (
           <MemoryView
