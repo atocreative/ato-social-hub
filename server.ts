@@ -5033,7 +5033,17 @@ app.post('/api/posts/:id/organize', requireAuth, async (req: AuthenticatedReques
     return res.status(403).json({ error: 'Acesso negado: você não tem permissão para alterar este post.' });
   }
 
-  Object.assign(targetPost, organizeTransition(targetPost, target, new Date().toISOString()));
+  let patch;
+  try {
+    patch = organizeTransition(targetPost, target, new Date().toISOString(), {
+      publishedAt: req.body?.publishedAt ? String(req.body.publishedAt) : undefined,
+      tipoConteudo: req.body?.tipoConteudo || undefined,
+      descricaoConteudo: req.body?.descricaoConteudo ? String(req.body.descricaoConteudo) : undefined,
+    });
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message || 'Dados inválidos.' });
+  }
+  Object.assign(targetPost, patch);
   syncPostGroupStateToItemsAndMeta(targetPost);
   if (!testStateOverrideActive) {
     await upsertPostGroupToDb(targetPost);

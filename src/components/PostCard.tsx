@@ -12,6 +12,7 @@ import { MediaDownloadButton } from './MediaDownloadButton.tsx';
 import { MediaImage } from './MediaImage.tsx';
 import { getMediaKind, getDrivePreviewUrl } from '../utils/mediaKind.ts';
 import { MoreVertical, Eye, EyeOff, Trash2, Maximize2 } from 'lucide-react';
+import { mediaTypeLabel, contentTypeLabel } from '../utils/history.ts';
 
 interface PostCardProps {
   post: PostGroup;
@@ -123,6 +124,17 @@ export const PostCard: React.FC<PostCardProps> = ({
               </span>
               <span>·</span>
               {!isClean && <span className="font-mono tabular-nums">{formatDateTimeBR(post.dataCriacao)}</span>}
+              {isClean && (
+                <span className="text-[10px] text-[#8E8E93] truncate">
+                  {mediaTypeLabel(post.categoria)}
+                  {post.tipoConteudo && (
+                    <>
+                      {' · '}
+                      <span className="text-[#10B981]">{contentTypeLabel(post.tipoConteudo)}</span>
+                    </>
+                  )}
+                </span>
+              )}
 
               {post.isDeletedByClient ? (
                 <>

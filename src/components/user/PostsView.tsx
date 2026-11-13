@@ -1,10 +1,13 @@
 import React, { useMemo, useState } from 'react';
+import { Upload } from 'lucide-react';
 import type { PostGroup, InstagramPublishPayload } from '../../types/index.ts';
 import { filterPosts, type CategoryFilter, type MediaFilter } from '../../utils/postHelpers.ts';
 import { api } from '../../services/api.ts';
 import { PostCard } from '../PostCard.tsx';
 import { ApprovalModal } from '../ApprovalModal.tsx';
 import { RejectionModal } from '../RejectionModal.tsx';
+import { UploadMediaModal } from '../UploadMediaModal.tsx';
+import { MarkPublishedModal } from './MarkPublishedModal.tsx';
 
 type Tab = 'TODOS' | 'PENDENTES' | 'AGENDADOS' | 'PUBLICADOS' | 'NAO_VOU_POSTAR' | 'REPROVADOS';
 
@@ -26,6 +29,8 @@ const MEDIA: { id: MediaFilter; label: string }[] = [
 
 interface PostsViewProps {
   posts: PostGroup[];
+  /** Pasta do cliente no Drive, usada pelo upload. */
+  folderName: string;
   onChanged: () => void;
   onConfirmPublish: (post: PostGroup, payload: InstagramPublishPayload) => Promise<void>;
   onPublishInstagramNow: (post: PostGroup, caption: string, accountId?: string) => Promise<void>;
@@ -39,6 +44,7 @@ interface PostsViewProps {
 
 export const PostsView: React.FC<PostsViewProps> = ({
   posts,
+  folderName,
   onChanged,
   onConfirmPublish,
   onPublishInstagramNow,
@@ -51,6 +57,8 @@ export const PostsView: React.FC<PostsViewProps> = ({
   const [media, setMedia] = useState<MediaFilter>('TODOS');
   const [approving, setApproving] = useState<PostGroup | null>(null);
   const [rejecting, setRejecting] = useState<PostGroup | null>(null);
+  const [markingPublished, setMarkingPublished] = useState<PostGroup | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const list = useMemo(() => {
@@ -58,7 +66,7 @@ export const PostsView: React.FC<PostsViewProps> = ({
     return tab === 'NAO_VOU_POSTAR' ? base.filter((p) => p.status === 'NAO_VOU_POSTAR') : base;
   }, [posts, tab, category, media]);
 
-  const organize = async (post: PostGroup, target: 'PUBLICADO' | 'NAO_VOU_POSTAR' | 'PENDENTE') => {
+  const organize = async (post: PostGroup, target: 'NAO_VOU_POSTAR' | 'PENDENTE') => {
     setError(null);
     try {
       const res = await api.organizePost(post.id, target);
@@ -72,7 +80,7 @@ export const PostsView: React.FC<PostsViewProps> = ({
   const extraActionsFor = (post: PostGroup) => {
     const actions: { label: string; onClick: () => void }[] = [];
     if (post.status !== 'PUBLICADO') {
-      actions.push({ label: 'Marcar como publicado', onClick: () => organize(post, 'PUBLICADO') });
+      actions.push({ label: 'Marcar como publicado', onClick: () => setMarkingPublished(post) });
     }
     if (post.status !== 'NAO_VOU_POSTAR') {
       actions.push({ label: 'Não vou postar', onClick: () => organize(post, 'NAO_VOU_POSTAR') });
@@ -94,9 +102,19 @@ export const PostsView: React.FC<PostsViewProps> = ({
 
   return (
     <div className="space-y-6 max-w-6xl">
-      <header>
-        <h1 className="text-2xl font-bold">Posts</h1>
-        <p className="text-sm text-[#8E8E93] mt-1">Aprove, agende, reprove e organize suas publicações.</p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Posts</h1>
+          <p className="text-sm text-[#8E8E93] mt-1">Aprove, agende, reprove e organize suas publicações.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setUploadOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#10B981] hover:bg-[#0EA271] text-[#0A0A0A] font-semibold text-sm cursor-pointer"
+        >
+          <Upload className="w-4 h-4" />
+          <span>Enviar mídia</span>
+        </button>
       </header>
 
       <div className="flex flex-wrap gap-2">
@@ -191,6 +209,28 @@ export const PostsView: React.FC<PostsViewProps> = ({
           onConfirmReject={onConfirmReject}
         />
       )}
+
+      {markingPublished && (
+        <MarkPublishedModal
+          post={markingPublished}
+          onClose={() => setMarkingPublished(null)}
+          onConfirm={async (details) => {
+            const res = await api.organizePost(markingPublished.id, 'PUBLICADO', details);
+            if (!res.success) throw new Error(res.error || 'Não foi possível marcar como publicado.');
+            onChanged();
+          }}
+        />
+      )}
+
+      <UploadMediaModal
+        isOpen={uploadOpen}
+        onClose={() => setUploadOpen(false)}
+        onUploadSuccess={() => {
+          setUploadOpen(false);
+          onChanged();
+        }}
+        folderName={folderName}
+      />
     </div>
   );
 };

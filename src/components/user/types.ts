@@ -1,1 +1,1 @@
-export type UserView = 'dashboard' | 'posts' | 'agenda' | 'memoria' | 'conta';
+export type UserView = 'dashboard' | 'posts' | 'agenda' | 'historico' | 'memoria' | 'conta';

@@ -20,6 +20,7 @@ import type { UserView } from './components/user/types.ts';
 import { UserDashboard } from './components/user/UserDashboard.tsx';
 import { PostsView } from './components/user/PostsView.tsx';
 import { AgendaView } from './components/user/AgendaView.tsx';
+import { HistoryView } from './components/user/HistoryView.tsx';
 import { MemoryView } from './components/user/MemoryView.tsx';
 import { AccountView } from './components/user/AccountView.tsx';
 import { Trash2, AlertCircle, EyeOff, Instagram } from 'lucide-react';
@@ -561,9 +562,11 @@ export default function App() {
     return (
       <UserLayout user={user} view={userView} onChangeView={setUserView} onLogout={handleLogout}>
         {userView === 'dashboard' && <UserDashboard posts={posts} />}
+        {userView === 'historico' && <HistoryView posts={posts} />}
         {userView === 'posts' && (
           <PostsView
             posts={posts}
+            folderName={effectiveTenantFolderName || ''}
             onChanged={loadPosts}
             onConfirmPublish={handleConfirmPublish}
             onPublishInstagramNow={handlePublishInstagramNow}

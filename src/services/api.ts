@@ -140,11 +140,12 @@ export const api = {
   // Não publica nem apaga nada no Instagram.
   organizePost: async (
     id: string,
-    target: 'PUBLICADO' | 'NAO_VOU_POSTAR' | 'PENDENTE'
+    target: 'PUBLICADO' | 'NAO_VOU_POSTAR' | 'PENDENTE',
+    details?: { publishedAt?: string; tipoConteudo?: string; descricaoConteudo?: string }
   ): Promise<{ success: boolean; status?: string; error?: string }> => {
     return apiFetch(`/api/posts/${encodeURIComponent(id)}/organize`, {
       method: 'POST',
-      body: JSON.stringify({ target }),
+      body: JSON.stringify({ target, ...(details || {}) }),
     });
   },
 

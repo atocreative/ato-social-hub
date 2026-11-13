@@ -173,6 +173,9 @@ export interface PostGroup {
   scheduledTimezone?: string;
   scheduledAccountId?: string;
   publishedAt?: string;
+  /** Tipo do conteúdo, informado pelo usuário ao marcar como publicado/agendar. */
+  tipoConteudo?: 'NOTICIA' | 'EMPRESA' | 'CURIOSIDADE' | 'OUTRO';
+  descricaoConteudo?: string;
   instagramMediaId?: string;
   instagramContainerId?: string;
   childContainerIds?: string[];

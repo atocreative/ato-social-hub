@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, ListChecks, CalendarDays, Sparkles, User, LogOut } from 'lucide-react';
+import { LayoutDashboard, ListChecks, CalendarDays, History, Sparkles, User, LogOut } from 'lucide-react';
 import type { AuthResponse } from '../../types/index.ts';
 import type { UserView } from './types.ts';
 
@@ -15,6 +15,7 @@ const NAV: { view: UserView; label: string; icon: React.ComponentType<{ classNam
   { view: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { view: 'posts', label: 'Posts', icon: ListChecks },
   { view: 'agenda', label: 'Agenda', icon: CalendarDays },
+  { view: 'historico', label: 'Histórico', icon: History },
   { view: 'memoria', label: 'Memória criativa', icon: Sparkles },
   { view: 'conta', label: 'Conta', icon: User },
 ];
@@ -72,7 +73,7 @@ export const UserLayout: React.FC<UserLayoutProps> = ({ user, view, onChangeView
       <main className="flex-1 min-w-0 px-4 py-6 md:px-10 md:py-10 pb-24 md:pb-10">{children}</main>
 
       {/* Barra inferior (celular) */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-[#0D0D0D] border-t border-[#1C1C1C] grid grid-cols-5">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-20 bg-[#0D0D0D] border-t border-[#1C1C1C] grid grid-cols-6">
         {NAV.map(({ view: v, label, icon: Icon }) => {
           const active = v === view;
           return (
