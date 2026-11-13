@@ -15,6 +15,13 @@ import { WaitingRoom } from './components/WaitingRoom.tsx';
 import { UploadMediaModal } from './components/UploadMediaModal.tsx';
 import { PublicLegalPage, LegalRoute } from './components/PublicLegalPage.tsx';
 import { ClientObservationsView } from './components/ClientObservationsView.tsx';
+import { UserLayout } from './components/user/UserLayout.tsx';
+import type { UserView } from './components/user/types.ts';
+import { UserDashboard } from './components/user/UserDashboard.tsx';
+import { PostsView } from './components/user/PostsView.tsx';
+import { AgendaView } from './components/user/AgendaView.tsx';
+import { MemoryView } from './components/user/MemoryView.tsx';
+import { AccountView } from './components/user/AccountView.tsx';
 import { Trash2, AlertCircle, EyeOff, Instagram } from 'lucide-react';
 
 function resolveLegalRoute(pathname: string): LegalRoute | null {
@@ -39,6 +46,8 @@ export default function App() {
 
   // Admin View State: Manage Tenants vs Approval Dashboard
   const [adminView, setAdminView] = useState<'ADMIN_TENANTS' | 'APPROVAL_DASHBOARD'>('ADMIN_TENANTS');
+  // Visão da área do usuário (TENANT): dashboard, posts, agenda, memória e conta
+  const [userView, setUserView] = useState<UserView>('dashboard');
   const [previewTenant, setPreviewTenant] = useState<TenantAccount | null>(null);
 
   // Selected Company Context in "Mídias Sincronizadas" ('ALL' = Visão Global Admin, or company name e.g. "Ato")
@@ -528,6 +537,24 @@ export default function App() {
     effectiveCompanyFilter === 'ALL'
       ? 'Todas as Empresas (Visão Global)'
       : effectiveCompanyFilter;
+
+  // Área do usuário (TENANT conectado pelo Instagram). O admin segue no painel abaixo, inalterado.
+  if (!isAdmin) {
+    return (
+      <UserLayout user={user} view={userView} onChangeView={setUserView} onLogout={handleLogout}>
+        {userView === 'dashboard' && <UserDashboard posts={posts} />}
+        {userView === 'posts' && <PostsView posts={posts} />}
+        {userView === 'agenda' && <AgendaView posts={posts} />}
+        {userView === 'memoria' && (
+          <MemoryView
+            companyName={user.nome}
+            driveFolderName={effectiveTenantFolderName || undefined}
+          />
+        )}
+        {userView === 'conta' && <AccountView user={user} onAccountDeleted={handleLogout} />}
+      </UserLayout>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-[#FFFFFF] flex flex-col font-sans antialiased">
