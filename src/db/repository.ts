@@ -16,6 +16,7 @@ import {
   PostStatus,
   PublishAttemptRecord,
   PublishLockInfo,
+  RejectionDetails,
   RejectionFeedback,
   TenantAccount,
   TenantStatus,
@@ -1579,6 +1580,7 @@ export async function recordRejectionInDb(params: {
   novoNomeArquivo: string;
   tags: string[];
   motivo: string;
+  detalhes?: RejectionDetails;
   rejectedBy?: string;
   dataReprovacao: string;
   renameItemFn: (originalName: string) => string;
@@ -1591,6 +1593,7 @@ export async function recordRejectionInDb(params: {
       dataReprovacao: params.dataReprovacao,
       pastaClienteId: params.pastaClienteId,
       driveFileId: params.driveFileId,
+      detalhes: params.detalhes,
     };
 
     const rejId = `rej_${params.postId}_${Date.now()}`;

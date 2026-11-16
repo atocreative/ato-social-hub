@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = 'ato_super_secret_key_2026_998877';
-const WEBHOOK_SECRET_TOKEN = 'ato_webhook_sync_token_884422';
+// Segredos de teste vêm do ambiente; nunca são versionados no código.
+const JWT_SECRET = process.env.JWT_SECRET || 'test-only-jwt-secret';
+const WEBHOOK_SECRET_TOKEN = process.env.WEBHOOK_SECRET_TOKEN || 'test-only-webhook-token';
 
 function validateWebhookToken(token: string) {
   // Scenario 1: Fixed M2M Token
@@ -21,7 +22,7 @@ function validateWebhookToken(token: string) {
 }
 
 test('Webhook Auth validates Scenario 1 (Fixed M2M Token)', () => {
-  const result = validateWebhookToken('ato_webhook_sync_token_884422');
+  const result = validateWebhookToken(WEBHOOK_SECRET_TOKEN);
   assert.equal(result.valid, true);
   assert.equal(result.scenario, 'SCENARIO_1_FIXED_TOKEN');
 });

@@ -21,6 +21,20 @@ export type ConnectionStatus =
   | 'ESCOPOS_INSUFICIENTES'
   | 'EXPIRADO';
 
+export interface RejectionDetails {
+  localProblema?: string;
+  erroPrincipal?: string;
+  preservar?: string;
+  mudar?: string;
+}
+
+export interface RejectionFeedbackInput {
+  tags: string[];
+  motivo: string;
+  pastaClienteId?: string;
+  detalhes: RejectionDetails;
+}
+
 export interface RejectionFeedback {
   tags: string[];
   motivo: string;
@@ -28,6 +42,7 @@ export interface RejectionFeedback {
   dataReprovacao: string;
   pastaClienteId?: string;
   driveFileId?: string;
+  detalhes?: RejectionDetails;
 }
 
 export interface PublishLockInfo {

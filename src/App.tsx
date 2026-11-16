@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { api, authStorage } from './services/api.ts';
-import { PostGroup, UserProfile, InstagramPublishPayload, TenantAccount } from './types/index.ts';
+import { PostGroup, UserProfile, InstagramPublishPayload, TenantAccount, RejectionFeedbackInput } from './types/index.ts';
 import { filterPosts, CategoryFilter, MediaFilter, formatDateTimeBR } from './utils/postHelpers.ts';
 import { LoginView } from './components/LoginView.tsx';
 import { Header } from './components/Header.tsx';
@@ -333,7 +333,7 @@ export default function App() {
 
   const handleConfirmReject = async (
     post: PostGroup,
-    feedback: { tags: string[]; motivo: string; pastaClienteId?: string }
+    feedback: RejectionFeedbackInput
   ) => {
     const res = await api.rejectPost(post.id, feedback);
     showNotification('info', res.message);
@@ -384,7 +384,7 @@ export default function App() {
   // leva o post para "Não vou postar", em vez de ficar só como reprovado.
   const handleUserReject = async (
     post: PostGroup,
-    feedback: { tags: string[]; motivo: string; pastaClienteId?: string }
+    feedback: RejectionFeedbackInput
   ) => {
     await handleConfirmReject(post, feedback);
     await api.organizePost(post.id, 'NAO_VOU_POSTAR');

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { RefreshCw, Upload } from 'lucide-react';
-import type { PostGroup, InstagramPublishPayload } from '../../types/index.ts';
+import type { PostGroup, InstagramPublishPayload, RejectionFeedbackInput } from '../../types/index.ts';
 import { filterPosts, type CategoryFilter, type MediaFilter } from '../../utils/postHelpers.ts';
 import { api } from '../../services/api.ts';
 import { PostCard } from '../PostCard.tsx';
@@ -36,7 +36,7 @@ interface PostsViewProps {
   onPublishInstagramNow: (post: PostGroup, caption: string, accountId?: string) => Promise<void>;
   onConfirmReject: (
     post: PostGroup,
-    feedback: { tags: string[]; motivo: string; pastaClienteId?: string }
+    feedback: RejectionFeedbackInput
   ) => Promise<void>;
   onHide: (post: PostGroup) => Promise<void>;
   onUnhide: (post: PostGroup) => Promise<void>;

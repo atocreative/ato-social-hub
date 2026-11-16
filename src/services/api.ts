@@ -1,4 +1,4 @@
-import { AuthResponse, DriveImageItem, PostGroup, InstagramPublishPayload, ClientObservation, CreativeContext } from '../types/index.ts';
+import { AuthResponse, DriveImageItem, PostGroup, InstagramPublishPayload, ClientObservation, CreativeContext, RejectionDetails } from '../types/index.ts';
 
 const TOKEN_KEY = 'ato_social_jwt_token';
 const USER_KEY = 'ato_social_user_data';
@@ -310,6 +310,7 @@ export const api = {
       tags: string[];
       motivo: string;
       pastaClienteId?: string;
+      detalhes?: RejectionDetails;
     }
   ): Promise<{
     success: boolean;

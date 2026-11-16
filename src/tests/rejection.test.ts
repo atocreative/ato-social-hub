@@ -2,8 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'ato_super_secret_key_2026_998877';
-const BASE_URL = 'http://localhost:3000';
+// Segredos vêm do ambiente de teste (nunca do código-fonte).
+const JWT_SECRET = process.env.JWT_SECRET || '';
+const WEBHOOK_TOKEN = process.env.WEBHOOK_SECRET_TOKEN || '';
+const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:3000';
+if (!JWT_SECRET || !WEBHOOK_TOKEN) {
+  throw new Error('Defina JWT_SECRET e WEBHOOK_SECRET_TOKEN para rodar o teste de reprovação.');
+}
 
 test('Rejection Feedback Loop API: POST /api/posts/:id/reject', async () => {
   // 1. Generate valid admin JWT
@@ -23,7 +28,7 @@ test('Rejection Feedback Loop API: POST /api/posts/:id/reject', async () => {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ato_webhook_sync_token_884422`,
+      Authorization: `Bearer ${WEBHOOK_TOKEN}`,
     },
     body: JSON.stringify({
       evento: 'NOVAS_ARTES_SOCIAL_MEDIA',
@@ -98,8 +103,10 @@ test('Rejection Feedback Loop API: POST /api/posts/:id/reject', async () => {
   assert.equal(rejectData.success, true);
   assert.equal(rejectData.post.status, 'REPROVADO');
   assert.ok(rejectData.novoNomeArquivo);
-  assert.ok(rejectData.novoNomeArquivo.includes('posicao_da_logo'));
-  assert.ok(rejectData.novoNomeArquivo.includes('cores_fortes_erradas'));
+  // Nome estável: não carrega o motivo, só o ID do feedback e o slide.
+  assert.ok(rejectData.novoNomeArquivo.startsWith('REP-'));
+  assert.ok(!rejectData.novoNomeArquivo.includes('posicao_da_logo'));
+  assert.ok(rejectData.feedbackId);
   assert.ok(rejectData.rejectionFeedback);
   assert.deepEqual(rejectData.rejectionFeedback.tags, rejectionPayload.tags);
   assert.equal(rejectData.rejectionFeedback.motivo, rejectionPayload.motivo);
@@ -108,7 +115,7 @@ test('Rejection Feedback Loop API: POST /api/posts/:id/reject', async () => {
   const gasPayload = rejectData.gasWebhookResult?.payload;
   assert.ok(gasPayload);
   assert.equal(gasPayload.acao, 'REPROVAR_E_MOVER');
-  assert.equal(gasPayload.token, 'ato_webhook_sync_token_884422');
+  assert.equal(gasPayload.token, WEBHOOK_TOKEN);
   assert.equal(gasPayload.pastaClienteId, '1CCJ4Fo3hLGSTb1y84P2tckFYW4bQudGF');
   assert.deepEqual(gasPayload.tags, rejectionPayload.tags);
   assert.equal(gasPayload.motivo, rejectionPayload.motivo);

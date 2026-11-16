@@ -4732,6 +4732,11 @@ app.post('/api/webhooks/meta', (req: Request, res: Response) => {
 });
 
 // ----------------------------------------------------
+// Feedbacks já confirmados pelo Drive, indexados por feedbackId (idempotência de reprovação).
+// Em memória: vale para a instância atual. Com várias instâncias, a dedupe final é do Apps Script.
+const FEEDBACK_CACHE_MAX = 5000;
+const feedbackProcessados = new Map<string, any>();
+
 // 5. REJECTION FLOW (REPROVAR_E_MOVER -> GOOGLE_APPS_SCRIPT_URL)
 // ----------------------------------------------------
 app.post('/api/posts/:id/reject', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
@@ -4742,7 +4747,19 @@ app.post('/api/posts/:id/reject', requireAuth, async (req: AuthenticatedRequest,
   const secretToken = process.env.WEBHOOK_SECRET_TOKEN || '';
 
   const { id } = req.params;
-  const { tags = [], motivo = '', pastaClienteId: customPastaClienteId } = req.body;
+  // pastaClienteId NÃO vem do cliente: a pasta é sempre a do próprio post (isolamento entre empresas).
+  const { tags = [], motivo = '', detalhes: rawDetalhes } = req.body;
+
+  const detalhes = {
+    localProblema: String(rawDetalhes?.localProblema || '').trim(),
+    erroPrincipal: String(rawDetalhes?.erroPrincipal || '').trim(),
+    preservar: String(rawDetalhes?.preservar || '').trim(),
+    mudar: String(rawDetalhes?.mudar || motivo || '').trim(),
+  };
+
+  if (!String(motivo || '').trim()) {
+    return res.status(400).json({ error: 'Informe o que deve mudar na arte para registrar a orientação de correção.' });
+  }
 
   const targetIndex = postGroups.findIndex((p) => p.id === id);
   if (targetIndex === -1) {
@@ -4771,85 +4788,113 @@ app.post('/api/posts/:id/reject', requireAuth, async (req: AuthenticatedRequest,
     ? driveFoldersMap.get(targetPost.driveFolderName.toLowerCase())
     : undefined;
 
-  const pastaClienteId =
-    customPastaClienteId ||
-    targetPost.pastaClienteId ||
-    targetTenant?.driveFolderId ||
-    knownFolder?.id ||
-    targetPost.driveFolderName ||
-    'folder_ato_midia_01';
+  const pastaClienteId = targetPost.pastaClienteId || targetTenant?.driveFolderId || knownFolder?.id;
+  if (!pastaClienteId) {
+    return res.status(422).json({ error: 'Pasta do cliente não identificada para este criativo. Nada foi alterado.' });
+  }
 
   const driveFileId = targetPost.items[0]?.driveFileId || targetPost.id;
   const driveFileIds = targetPost.items.map((i) => i.driveFileId);
 
   const originalFileName = targetPost.items[0]?.nome || targetPost.nome || 'arte.png';
-  const novoNomeArquivo = generateRejectedFilename(tags, motivo, originalFileName);
 
-  const rejectionFeedback = {
-    tags: Array.isArray(tags) ? tags : [],
-    motivo: String(motivo || '').trim(),
-    novoNomeArquivo,
-    dataReprovacao: new Date().toISOString(),
-    pastaClienteId,
-    driveFileId,
-  };
+  // Idempotência: o mesmo feedbackId não é processado duas vezes (duplo clique, retry de rede).
+  const feedbackId =
+    String(req.body?.feedbackId || '').trim() ||
+    `fb_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+  const feedbackAnterior = feedbackProcessados.get(feedbackId);
+  if (feedbackAnterior) {
+    return res.json({ ...feedbackAnterior, duplicado: true });
+  }
 
-  try {
-    const memPath = path.join(__dirname, '_MEMORIA_REPROVACOES.md');
-    const memoLine = `- [${new Date().toISOString()}] Arquivo: **${originalFileName}** -> Novo Nome: **${novoNomeArquivo}** | Motivo: "${motivo}" | Tags: ${JSON.stringify(tags)} | Pasta: ${targetPost.driveFolderName || targetTenant?.driveFolderName || 'Geral'}\n`;
-    fs.appendFileSync(memPath, memoLine, 'utf8');
-  } catch (err: any) {
-    console.warn('Erro ao atualizar _MEMORIA_REPROVACOES.md:', err.message);
+  // Carrossel: reprovação parcial (só alguns slides) depende do estado "Solicitar ajuste",
+  // que ainda não existe no Social Hub. Enquanto isso, bloqueia para não divergir do Drive.
+  const requisitados: unknown = req.body?.arquivosAfetados;
+  if (Array.isArray(requisitados) && requisitados.length && requisitados.length !== driveFileIds.length) {
+    return res.status(400).json({
+      error: 'Reprovação parcial de carrossel ainda não é suportada. Reprove o conteúdo inteiro ou use "Solicitar ajuste".',
+    });
   }
 
   const gasPayload = {
     token: secretToken,
     acao: 'REPROVAR_E_MOVER',
+    feedbackId,
+    contentId: targetPost.id,
     driveFileId,
+    arquivosAfetados: driveFileIds,
+    arquivosTodos: driveFileIds,
     pastaClienteId,
-    tags: rejectionFeedback.tags,
-    motivo: rejectionFeedback.motivo,
-    novoNomeArquivo,
-    driveFileIds,
+    tags: Array.isArray(tags) ? tags.map(String) : [],
+    motivo: detalhes.mudar,
+    detalhes,
     driveFolderName: targetPost.driveFolderName || targetTenant?.driveFolderName,
-    timestamp: rejectionFeedback.dataReprovacao,
+    timestamp: new Date().toISOString(),
   };
 
-  let gasDispatchStatus = 'SIMULADO_LOCAL';
+  if (!scriptUrl || !scriptUrl.startsWith('http')) {
+    return res.status(503).json({ error: 'Integração com o Google Drive não configurada. Nada foi alterado.' });
+  }
 
-  if (scriptUrl && scriptUrl.startsWith('http')) {
-    try {
-      const gasResponse = await fetch(scriptUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        redirect: 'follow',
-        body: JSON.stringify(gasPayload),
-      });
-      const rawResponse = await gasResponse.text();
-      console.log("RESPOSTA CRUA DO SCRIPT:", rawResponse);
-      gasDispatchStatus = gasResponse.ok ? 'ENVIADO_COM_SUCESSO' : `GAS_HTTP_${gasResponse.status}`;
-    } catch (gasErr: any) {
-      console.warn('[Google Apps Script] Aviso ao acionar Web App remoto de reprovação:', gasErr.message);
-      gasDispatchStatus = `FALHA_ENVIO: ${gasErr.message}`;
+  // Só conclui quando o Apps Script confirma com `sucesso: true`. HTTP 200 sozinho não basta.
+  let gasResult: any = null;
+  try {
+    const gasResponse = await fetch(scriptUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      redirect: 'follow',
+      body: JSON.stringify(gasPayload),
+    });
+    gasResult = JSON.parse(await gasResponse.text());
+    if (!gasResponse.ok || gasResult?.sucesso !== true) {
+      throw new Error(gasResult?.erro || `HTTP ${gasResponse.status}`);
     }
+  } catch (gasErr: any) {
+    console.warn('[Google Apps Script] Reprovação não confirmada pelo Drive:', gasErr.message);
+    return res.status(502).json({
+      success: false,
+      codigo: gasResult?.codigo || 'FALHA_DRIVE',
+      error: `O Drive não confirmou a reprovação (${gasErr.message}). Nada foi alterado no Social Hub; tente novamente.`,
+    });
+  }
+
+  const novoNomeArquivo: string = gasResult.novoNomeArquivo || originalFileName;
+  const renamedFiles: Array<{ nomeOriginal: string; novoNome: string }> = Array.isArray(gasResult.arquivos)
+    ? gasResult.arquivos
+    : [];
+  const rejectionFeedback = {
+    tags: Array.isArray(tags) ? tags.map(String) : [],
+    motivo: detalhes.mudar,
+    novoNomeArquivo,
+    dataReprovacao: new Date().toISOString(),
+    pastaClienteId,
+    driveFileId,
+    detalhes,
+  };
+
+  // Cópia local legível. A fonte de verdade da memória estruturada é o Drive (_MEMORIA_REPROVACOES.md).
+  try {
+    const memPath = path.join(__dirname, '_MEMORIA_REPROVACOES.md');
+    const memoLine = `- [${new Date().toISOString()}] feedback ${feedbackId} | Arquivo: **${originalFileName}** -> **${novoNomeArquivo}** | Onde: "${detalhes.localProblema}" | Erro: "${detalhes.erroPrincipal}" | Preservar: "${detalhes.preservar}" | Corrigir: "${detalhes.mudar}" | Tags: ${JSON.stringify(rejectionFeedback.tags)} | Pasta: ${targetPost.driveFolderName || targetTenant?.driveFolderName || 'Geral'}\n`;
+    fs.appendFileSync(memPath, memoLine, 'utf8');
+  } catch (err: any) {
+    console.warn('Erro ao atualizar _MEMORIA_REPROVACOES.md:', err.message);
   }
 
   await recordRejectionInDb({
     postId: targetPost.id,
     driveFileId,
     pastaClienteId,
-    pastaNome:
-      targetPost.driveFolderName || targetTenant?.driveFolderName || 'Ato',
+    pastaNome: targetPost.driveFolderName || targetTenant?.driveFolderName || 'Ato',
     originalFilename: originalFileName,
     novoNomeArquivo,
     tags: rejectionFeedback.tags,
     motivo: rejectionFeedback.motivo,
-    rejectedBy:
-      req.user?.email || req.user?.instagramUsername || req.user?.nome || 'Cliente/Admin',
+    detalhes,
+    rejectedBy: req.user?.email || req.user?.instagramUsername || req.user?.nome || 'Cliente/Admin',
     dataReprovacao: rejectionFeedback.dataReprovacao,
-    renameItemFn: (itemName) => generateRejectedFilename(tags, motivo, itemName),
+    // Nome estável vem do Drive; o nome do arquivo não carrega mais o motivo.
+    renameItemFn: (itemName) => renamedFiles.find((f) => f.nomeOriginal === itemName)?.novoNome || itemName,
   });
 
   await syncStateFromPostgres();
@@ -4860,17 +4905,27 @@ app.post('/api/posts/:id/reject', requireAuth, async (req: AuthenticatedRequest,
       rejectionFeedback,
     };
 
-  return res.json({
+  const resposta = {
     success: true,
+    feedbackId,
     message: `Criativo "${targetPost.nome}" reprovado com sucesso. Movido para Reprovados e registrado no histórico.`,
     post: updatedPost,
     novoNomeArquivo,
     rejectionFeedback,
     gasWebhookResult: {
-      status: gasDispatchStatus,
+      status: 'CONFIRMADO_PELO_DRIVE',
       payload: gasPayload,
+      resultado: gasResult,
     },
-  });
+  };
+
+  if (feedbackProcessados.size >= FEEDBACK_CACHE_MAX) {
+    const primeiraChave = feedbackProcessados.keys().next().value;
+    if (primeiraChave !== undefined) feedbackProcessados.delete(primeiraChave);
+  }
+  feedbackProcessados.set(feedbackId, resposta);
+
+  return res.json(resposta);
 });
 
 // Suporte para exclusão direta (DELETE /api/posts/:id) com envio para lixeira do Google Drive e PostgreSQL
