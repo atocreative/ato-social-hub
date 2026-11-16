@@ -4369,13 +4369,8 @@ app.get('/api/posts', requireAuth, async (req: AuthenticatedRequest, res: Respon
     return p;
   });
 
-  // Oculta por completo o post que tenha qualquer mídia indisponível (arquivo inexistente ou corrompido
-  // no Drive): um carrossel com um slide quebrado não pode ser postado, então some inteiro.
-  if (unavailableMediaIds.size > 0) {
-    filteredPosts = filteredPosts.filter(
-      (p) => !(p.items || []).some((item) => unavailableMediaIds.has(String(item.driveFileId || '')))
-    );
-  }
+  // Mídia com problema NÃO é ocultada: o post continua visível, com o placeholder "Imagem indisponível",
+  // para que o cliente/admin possa reprovar o criativo com a imagem quebrada.
 
   // Filtro de isolamento de visão:
   // - TENANT (cliente): esconde totalmente mídias que o cliente apagou/ocultou
@@ -5406,12 +5401,9 @@ async function fetchDriveThumbnail(
     }
 
     if (corrupted || definitelyMissing) {
-      unavailableMediaIds.add(fileId);
-      void markMediaUnavailableInDb(fileId).catch((err: any) =>
-        console.warn(`[Media Thumb] Falha ao marcar ${fileId} como indisponível:`, err?.message)
-      );
+      // Apenas registra. A mídia continua no sistema para ser reprovada; não é marcada nem ocultada.
       console.warn(
-        `[Media Thumb] ${fileId} ${corrupted ? 'corrompido' : 'não existe mais'} no Drive: mídia ocultada do sistema.`
+        `[Media Thumb] ${fileId} ${corrupted ? 'corrompido' : 'não existe mais'} no Drive: exibido como indisponível (não ocultado).`
       );
     }
     return null;

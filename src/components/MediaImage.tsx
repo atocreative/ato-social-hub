@@ -2,9 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { ImageOff } from 'lucide-react';
 import { driveThumbUrl } from '../utils/mediaUrl.ts';
 
-// Ids já reportados nesta sessão: evita recarregar a lista em loop para a mesma mídia.
-const reportedUnavailable = new Set<string>();
-
 interface MediaImageItem {
   driveFileId?: string;
   viewUrl?: string;
@@ -55,13 +52,6 @@ export const MediaImage: React.FC<MediaImageProps> = ({
   useEffect(() => {
     setSourceIndex(0);
   }, [driveFileId, width, item?.viewUrl, item?.thumbnailUrl]);
-
-  // Avisa a aplicação (uma vez por arquivo) para recarregar a lista: o servidor oculta mídias quebradas.
-  useEffect(() => {
-    if (!exhausted || !driveFileId || reportedUnavailable.has(driveFileId)) return;
-    reportedUnavailable.add(driveFileId);
-    window.dispatchEvent(new CustomEvent('ato:media-unavailable', { detail: driveFileId }));
-  }, [exhausted, driveFileId]);
 
   if (exhausted) {
     return (

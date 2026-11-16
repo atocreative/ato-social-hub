@@ -176,22 +176,6 @@ export default function App() {
     }
   }, [user, loadPosts]);
 
-  // Quando uma mídia não carrega de nenhuma fonte, o servidor já a marcou como indisponível:
-  // recarrega a lista para o post sumir sem precisar atualizar a página.
-  useEffect(() => {
-    if (!user) return;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    const onUnavailable = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => loadPosts(), 1500);
-    };
-    window.addEventListener('ato:media-unavailable', onUnavailable);
-    return () => {
-      if (timer) clearTimeout(timer);
-      window.removeEventListener('ato:media-unavailable', onUnavailable);
-    };
-  }, [user, loadPosts]);
-
   // Listen for OAuth popup completion or error while inside the dashboard
   useEffect(() => {
     if (!user) return;
