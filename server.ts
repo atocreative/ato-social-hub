@@ -4813,6 +4813,14 @@ app.post('/api/posts/:id/reject', requireAuth, asyncRoute(async (req: Authentica
     return res.json({ ...feedbackAnterior, duplicado: true });
   }
 
+  // Já reprovado: não reprovar de novo (um novo feedbackId renomearia a arte e duplicaria a memória).
+  if (targetPost.status === 'REPROVADO') {
+    return res.status(409).json({
+      success: false,
+      error: 'Este criativo já está reprovado. Nada foi alterado. Use "Ajustar" se precisar registrar uma nova correção.',
+    });
+  }
+
   // Carrossel: reprovação parcial (só alguns slides) depende do estado "Solicitar ajuste",
   // que ainda não existe no Social Hub. Enquanto isso, bloqueia para não divergir do Drive.
   const requisitados: unknown = req.body?.arquivosAfetados;

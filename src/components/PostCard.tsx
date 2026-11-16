@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { PostGroup } from '../types/index.ts';
+import { statusLabel } from './user/format.ts';
 import { CarouselViewer } from './CarouselViewer.tsx';
 import { MediaLightboxModal } from './MediaLightboxModal.tsx';
 import {
@@ -174,7 +175,7 @@ export const PostCard: React.FC<PostCardProps> = ({
                       ? 'Reconexão Necessária'
                       : post.status === 'FALHA_PUBLICACAO'
                       ? 'Falha na Publicação'
-                      : 'Agendado'}
+                      : statusLabel(post.status)}
                   </span>
                 </>
               )}
@@ -436,6 +437,13 @@ export const PostCard: React.FC<PostCardProps> = ({
 
         {/* Action Buttons: Clean & Direct */}
         <div className="p-3 border-t border-[#242424] grid grid-cols-2 gap-2 bg-[#121212]">
+          {post.status === 'NAO_VOU_POSTAR' ? (
+            // Descarte editorial: não é agendamento nem reprovação. Não oferece Reagendar/Reprovar.
+            <p className="col-span-2 text-center text-xs text-[#8E8E93] py-2">
+              Descartado. Use o menu ⋮ para voltar para pendentes.
+            </p>
+          ) : (
+          <>
           <button
             type="button"
             onClick={() => onReject(post)}
@@ -459,6 +467,8 @@ export const PostCard: React.FC<PostCardProps> = ({
               ? 'Reconectar / Publicar'
               : 'Reagendar'}
           </button>
+          </>
+          )}
         </div>
       </article>
 
