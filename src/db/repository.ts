@@ -2798,7 +2798,8 @@ export async function getConsolidatedCreativeContextForCompany(
       `
       SELECT original_filename, novo_nome_arquivo, motivo, tags, data_reprovacao
       FROM rejections
-      WHERE pasta_nome = $1 OR pasta_cliente_id = $1 OR post_id IN (SELECT id FROM posts WHERE company_id = $2)
+      WHERE ativa_na_memoria = TRUE
+        AND (pasta_nome = $1 OR pasta_cliente_id = $1 OR post_id IN (SELECT id FROM posts WHERE company_id = $2))
       ORDER BY data_reprovacao DESC
       LIMIT 15
       `,

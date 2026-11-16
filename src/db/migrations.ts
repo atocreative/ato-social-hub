@@ -400,6 +400,13 @@ export const POSTGRES_MIGRATIONS: MigrationDefinition[] = [
       ALTER TABLE media_assets ADD COLUMN IF NOT EXISTS indisponivel_em TIMESTAMPTZ;
     `,
   },
+  {
+    version: '007_rejection_memory_flag',
+    name: 'Permite desativar feedbacks da memória criativa sem apagar o histórico de auditoria',
+    sql: `
+      ALTER TABLE rejections ADD COLUMN IF NOT EXISTS ativa_na_memoria BOOLEAN NOT NULL DEFAULT TRUE;
+    `,
+  },
 ];
 
 export const ALL_MANAGED_TABLES = [
