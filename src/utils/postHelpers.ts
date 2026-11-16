@@ -49,6 +49,36 @@ export function extractSlideNumber(filename: string): number {
 }
 
 /**
+ * Chave de ordem de um slide de carrossel, SEMPRE pelo nome do arquivo (nunca pela ordem do Drive,
+ * que é arbitrária, nem pela ordem gravada antes, que pode estar errada).
+ *   - "capa" (ex.: "Capa.png", "01_Capa.png") vem sempre primeiro.
+ *   - Depois, o número no início do nome ("01_...", "02-...", "03 ...").
+ *   - Sem número reconhecível, vai para o fim (999), ordenado pelo nome.
+ */
+export function slideOrderKey(nome: string): number {
+  const base = String(nome || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  // Arquivo reprovado (REP-<feedback>-sNN__...): a posição real do slide está no marcador -sNN.
+  const marcador = base.match(/-s(\d{2})__/);
+  if (marcador) return parseInt(marcador[1], 10);
+  if (/(^|[^a-z])capa([^a-z]|$)/.test(base)) return 0;
+  const lead = base.match(/^(\d{1,3})(?=[^\d]|$)/);
+  if (lead) return parseInt(lead[1], 10);
+  return 999;
+}
+
+/**
+ * Ordena os slides de um carrossel pela chave do nome. Empates ficam por nome (estável e determinística).
+ * Não usa o campo `ordem` salvo: ele pode ter sido gravado com a ordem errada.
+ */
+export function sortCarouselItems<T extends { nome?: string }>(items: T[]): T[] {
+  return [...items].sort((a, b) => {
+    const diff = slideOrderKey(a.nome || '') - slideOrderKey(b.nome || '');
+    if (diff !== 0) return diff;
+    return String(a.nome || '').localeCompare(String(b.nome || ''), 'pt-BR', { numeric: true });
+  });
+}
+
+/**
  * Groups and sorts Drive items:
  * - Single posts and stories remain individual groups
  * - Carousels with the same loteNome (and tenant/folder) are grouped and ordered strictly by their slide number
@@ -190,11 +220,7 @@ export function groupAndSortDriveItems(items: DriveImageItem[]): PostGroup[] {
   // Sort carousel items by numeric order
   for (const group of groupsMap.values()) {
     if (group.categoria === 'Carrossel') {
-      group.items.sort((a, b) => {
-        const orderA = a.ordem !== undefined ? a.ordem : extractSlideNumber(a.nome);
-        const orderB = b.ordem !== undefined ? b.ordem : extractSlideNumber(b.nome);
-        return orderA - orderB;
-      });
+      group.items = sortCarouselItems(group.items).map((item, idx) => ({ ...item, ordem: idx + 1 }));
     }
   }
 

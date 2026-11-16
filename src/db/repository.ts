@@ -27,7 +27,7 @@ import {
   encryptInstagramToken,
   normalizeAndEncryptTenantToken,
 } from '../services/instagramCore.ts';
-import { groupAndSortDriveItems, normalizeCategoria } from '../utils/postHelpers.ts';
+import { groupAndSortDriveItems, normalizeCategoria, sortCarouselItems } from '../utils/postHelpers.ts';
 
 /**
  * Resolves the encryption key for Instagram tokens in PostgreSQL.
@@ -883,7 +883,13 @@ export async function listPostGroupsFromDb(filters?: {
   }
 
   return postsRes.rows.map((p) => {
-    const items = (mediaByPost.get(p.id) || []).map((it) => ({
+    // Carrossel: a ordem dos slides é sempre a do nome (capa primeiro), mesmo que o banco tenha ordem antiga errada.
+    const brutos = mediaByPost.get(p.id) || [];
+    const ordenados =
+      p.categoria === 'Carrossel'
+        ? sortCarouselItems(brutos).map((it, i) => ({ ...it, ordem: i + 1 }))
+        : brutos;
+    const items = ordenados.map((it) => ({
       ...it,
       status: (p.status as PostStatus) || it.status,
       caption: p.caption ?? undefined,
@@ -1091,9 +1097,11 @@ export async function upsertPostGroupToDb(
     ]
   );
 
-  for (let idx = 0; idx < group.items.length; idx++) {
-    const item = group.items[idx];
-    const ordem = item.ordem ?? idx + 1;
+  const itensGravados = group.categoria === 'Carrossel' ? sortCarouselItems(group.items) : group.items;
+  for (let idx = 0; idx < itensGravados.length; idx++) {
+    const item = itensGravados[idx];
+    // Carrossel: grava a posição real (1..n, capa primeiro) para que a ordem persistida nunca fique errada.
+    const ordem = group.categoria === 'Carrossel' ? idx + 1 : (item.ordem ?? idx + 1);
 
     await runner(
       `
