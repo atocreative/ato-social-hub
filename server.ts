@@ -4739,7 +4739,13 @@ const feedbackProcessados = new Map<string, any>();
 
 // 5. REJECTION FLOW (REPROVAR_E_MOVER -> GOOGLE_APPS_SCRIPT_URL)
 // ----------------------------------------------------
-app.post('/api/posts/:id/reject', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+// Express 4 não envia erros de handlers async ao middleware de erro: o wrapper encaminha a exceção (next(err)).
+const asyncRoute =
+  (fn: (req: AuthenticatedRequest, res: Response) => Promise<unknown>) =>
+  (req: AuthenticatedRequest, res: Response, next: NextFunction) =>
+    Promise.resolve(fn(req, res)).catch(next);
+
+app.post('/api/posts/:id/reject', requireAuth, asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
   getEnv();
   console.log("DEBUG ENV - URL:", process.env.GOOGLE_APPS_SCRIPT_URL);
 
@@ -4843,6 +4849,8 @@ app.post('/api/posts/:id/reject', requireAuth, async (req: AuthenticatedRequest,
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       redirect: 'follow',
+      // Apps Script pode demorar; sem limite, a requisição fica pendurada até o proxy derrubar.
+      signal: AbortSignal.timeout(90_000),
       body: JSON.stringify(gasPayload),
     });
     gasResult = JSON.parse(await gasResponse.text());
@@ -4926,7 +4934,7 @@ app.post('/api/posts/:id/reject', requireAuth, async (req: AuthenticatedRequest,
   feedbackProcessados.set(feedbackId, resposta);
 
   return res.json(resposta);
-});
+}));
 
 // Suporte para exclusão direta (DELETE /api/posts/:id) com envio para lixeira do Google Drive e PostgreSQL
 app.delete('/api/posts/:id', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
@@ -7563,6 +7571,18 @@ async function startServer() {
   if (!process.env.VITEST && !process.env.ATO_TEST_MODE) {
     startMediaPrefetchScheduler();
   }
+
+  // Erros não tratados devolvem JSON (nunca HTML de erro do proxy) e ficam registrados nos logs.
+  app.use((err: any, _req: any, res: Response, _next: NextFunction) => {
+    console.error('[ATO Social Hub] Erro não tratado:', err?.stack || err?.message || err);
+    if (res.headersSent) return;
+    res.status(500).json({ error: 'Erro interno no servidor. Veja os logs do Railway.', detalhe: String(err?.message || '') });
+  });
+
+  // Promessa rejeitada sem catch: registra em vez de derrubar o processo (o Railway reiniciaria o serviço).
+  process.on('unhandledRejection', (reason: any) => {
+    console.error('[ATO Social Hub] Promessa rejeitada sem tratamento:', reason?.stack || reason);
+  });
 
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`[ATO Social Hub] Servidor rodando na porta ${PORT}`);
