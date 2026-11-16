@@ -380,15 +380,13 @@ export default function App() {
     }
   };
 
-  // Área do usuário: reprovar continua alimentando a memória (rejectPost) e depois
-  // leva o post para "Não vou postar", em vez de ficar só como reprovado.
+  // Área do usuário: reprovar registra o aprendizado e deixa o post em REPROVADOS.
+  // "Não vou postar" é um descarte editorial separado (botão próprio na aba do post) e não gera reprovação.
   const handleUserReject = async (
     post: PostGroup,
     feedback: RejectionFeedbackInput
   ) => {
     await handleConfirmReject(post, feedback);
-    await api.organizePost(post.id, 'NAO_VOU_POSTAR');
-    await loadPosts();
   };
 
   // Área do usuário: apagar do sistema = ocultar do painel (restaurável). Não apaga no Instagram.
