@@ -436,12 +436,31 @@ export const PostCard: React.FC<PostCardProps> = ({
         )}
 
         {/* Action Buttons: Clean & Direct */}
-        <div className="p-3 border-t border-[#242424] grid grid-cols-2 gap-2 bg-[#121212]">
-          {post.status === 'NAO_VOU_POSTAR' ? (
-            // Descarte editorial: não é agendamento nem reprovação. Não oferece Reagendar/Reprovar.
-            <p className="col-span-2 text-center text-xs text-[#8E8E93] py-2">
-              Descartado. Use o menu ⋮ para voltar para pendentes.
-            </p>
+        {/* Publicados: nenhuma ação de reprovação ou agendamento. */}
+        {post.status !== 'PUBLICADO' && (
+        <div
+          className={`p-3 border-t border-[#242424] grid gap-2 bg-[#121212] ${
+            post.status === 'NAO_VOU_POSTAR' || isReprovado ? 'grid-cols-1' : 'grid-cols-2'
+          }`}
+        >
+          {isReprovado ? (
+            // Reprovado: somente ajustar a reprovação (reabre o formulário de feedback).
+            <button
+              type="button"
+              onClick={() => onReject(post)}
+              className="w-full py-2 px-3 bg-[#1A1A1A] hover:bg-[#241A1A] border border-[#2A2A2A] text-[#EF4444] text-xs font-medium rounded-lg transition-colors cursor-pointer"
+            >
+              Ajustar reprovação
+            </button>
+          ) : post.status === 'NAO_VOU_POSTAR' ? (
+            // Não vou postar: somente reprovar.
+            <button
+              type="button"
+              onClick={() => onReject(post)}
+              className="w-full py-2 px-3 bg-[#1A1A1A] hover:bg-[#241A1A] border border-[#2A2A2A] text-[#EF4444] text-xs font-medium rounded-lg transition-colors cursor-pointer"
+            >
+              Reprovar
+            </button>
           ) : (
           <>
           <button
@@ -449,7 +468,7 @@ export const PostCard: React.FC<PostCardProps> = ({
             onClick={() => onReject(post)}
             className="w-full py-2 px-3 bg-[#1A1A1A] hover:bg-[#241A1A] border border-[#2A2A2A] text-[#EF4444] text-xs font-medium rounded-lg transition-colors cursor-pointer"
           >
-            {isReprovado ? 'Ajustar' : 'Reprovar'}
+            Reprovar
           </button>
 
           <button
@@ -461,8 +480,6 @@ export const PostCard: React.FC<PostCardProps> = ({
               ? 'Aprovar'
               : isAprovado
               ? 'Agendar / Publicar'
-              : isReprovado
-              ? 'Reaprovar'
               : post.status === 'RECONEXAO_NECESSARIA' || post.status === 'FALHA_PUBLICACAO'
               ? 'Reconectar / Publicar'
               : 'Reagendar'}
@@ -470,6 +487,7 @@ export const PostCard: React.FC<PostCardProps> = ({
           </>
           )}
         </div>
+        )}
       </article>
 
       {/* Lightbox Modal for Expanded Visual Inspection */}
