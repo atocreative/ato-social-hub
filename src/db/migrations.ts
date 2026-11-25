@@ -1,4 +1,8 @@
+import crypto from 'node:crypto';
 import { dbQuery, withTransaction } from './pool.ts';
+
+// SHA-256 (sem sal) da senha padrão antiga: usado só para detectar que ela ainda existe.
+const RETIRED_DEFAULT_PASSWORD_SHA256 = crypto.createHash('sha256').update('666666').digest('hex');
 
 export interface MigrationDefinition {
   version: string;
@@ -596,3 +600,23 @@ export async function getAppliedMigrations(): Promise<
   }
 }
 
+
+/** Prontidão (healthcheck): banco responde, migrações DESTE código aplicadas, nenhuma senha padrão antiga. Sem dados no retorno. */
+export async function checkDeployReadiness(): Promise<{ ready: boolean; reasons: string[] }> {
+  const reasons: string[] = [];
+  try {
+    await dbQuery('SELECT 1');
+  } catch {
+    return { ready: false, reasons: ['database_unavailable'] };
+  }
+  const applied = new Set((await getAppliedMigrations()).map((m) => m.version));
+  const missing = POSTGRES_MIGRATIONS.filter((m) => !applied.has(m.version)).map((m) => m.version);
+  if (missing.length > 0) reasons.push('migrations_pending:' + missing.join(','));
+  try {
+    const res = await dbQuery<any>('SELECT 1 FROM users WHERE password_hash = $1 LIMIT 1', [RETIRED_DEFAULT_PASSWORD_SHA256]);
+    if (res.rows.length > 0) reasons.push('retired_default_password_present');
+  } catch {
+    reasons.push('users_check_failed');
+  }
+  return { ready: reasons.length === 0, reasons };
+}

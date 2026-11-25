@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { hashPassword, verifyPassword, unusablePasswordHash } from '../utils/passwordHash.ts';
 import { dbQuery, withTransaction, DbClientLike } from './pool.ts';
 import { ALL_MANAGED_TABLES } from './migrations.ts';
 import {
@@ -88,29 +89,30 @@ function parseJsonSafe<T>(val: any, fallback: T): T {
 // ============================================================================
 
 export async function ensureDefaultAdminUser(): Promise<void> {
+  // RECUPERAÇÃO: nunca grava a senha padrão antiga. A senha só muda por rotação explícita.
   const adminId = 'user_admin_ato';
-  const adminEmail = 'admin@atodev.com.br';
-  const passwordHash = hashPasswordSha256('666666');
-
-  await dbQuery(
-    `
-    INSERT INTO users (id, email, name, password_hash, role, status, permissions, updated_at)
-    VALUES ($1, $2, $3, $4, 'ADMIN', 'APROVADO', $5::jsonb, NOW())
-    ON CONFLICT (id) DO UPDATE SET
-      email = EXCLUDED.email,
-      password_hash = EXCLUDED.password_hash,
-      role = 'ADMIN',
-      status = 'APROVADO',
-      updated_at = NOW()
-    `,
-    [
-      adminId,
-      adminEmail,
-      'Administrador ATO',
-      passwordHash,
-      JSON.stringify(['ALL', 'MANAGE_TENANTS', 'APPROVE_POSTS', 'PUBLISH_INSTAGRAM', 'GENERATE_AI']),
-    ]
-  );
+  const adminEmail = String(process.env.ADMIN_BOOTSTRAP_EMAIL || 'admin@atodev.com.br').trim().toLowerCase();
+  const envPassword = String(process.env.ADMIN_BOOTSTRAP_PASSWORD || '');
+  const allowReset = String(process.env.ADMIN_BOOTSTRAP_PASSWORD_RESET || '').toLowerCase() === 'true';
+  const newPasswordHash = envPassword.length >= 12 ? hashPassword(envPassword) : null;
+  const permissions = JSON.stringify(['ALL', 'MANAGE_TENANTS', 'APPROVE_POSTS', 'PUBLISH_INSTAGRAM', 'GENERATE_AI']);
+  const existing = await dbQuery<{ id: string }>('SELECT id FROM users WHERE id = $1 LIMIT 1', [adminId]);
+  if (existing.rows.length === 0) {
+    await dbQuery(
+      `INSERT INTO users (id, email, name, password_hash, role, status, permissions, updated_at)
+       VALUES ($1, $2, $3, $4, 'ADMIN', 'APROVADO', $5::jsonb, NOW()) ON CONFLICT (id) DO NOTHING`,
+      [adminId, adminEmail, 'Administrador ATO', newPasswordHash || unusablePasswordHash(), permissions]
+    );
+    return;
+  }
+  if (newPasswordHash && allowReset) {
+    await dbQuery(
+      `UPDATE users SET email = $2, password_hash = $3, role = 'ADMIN', status = 'APROVADO', updated_at = NOW() WHERE id = $1`,
+      [adminId, adminEmail, newPasswordHash]
+    );
+  } else {
+    await dbQuery(`UPDATE users SET role = 'ADMIN', status = 'APROVADO', updated_at = NOW() WHERE id = $1`, [adminId]);
+  }
 }
 
 export async function authenticateAdminUser(
@@ -118,7 +120,6 @@ export async function authenticateAdminUser(
   password: string
 ): Promise<UserProfile | null> {
   const cleanEmail = String(email || '').trim().toLowerCase();
-  const hash = hashPasswordSha256(password);
 
   const res = await dbQuery<{
     id: string;
@@ -133,7 +134,9 @@ export async function authenticateAdminUser(
 
   if (res.rows.length > 0) {
     const row = res.rows[0];
-    if (row.password_hash === hash && row.role === 'ADMIN') {
+    const check = verifyPassword(password, row.password_hash);
+    if (check.ok && row.role === 'ADMIN') {
+      if (check.needsRehash) await dbQuery('UPDATE users SET password_hash = $2 WHERE id = $1', [row.id, hashPassword(password)]);
       await dbQuery('UPDATE users SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1', [row.id]);
       return {
         id: row.id,
@@ -153,7 +156,6 @@ export async function authenticateSocialHubUser(
   password: string
 ): Promise<{ user: UserProfile; tenant?: TenantAccount } | null> {
   const cleanEmail = String(email || '').trim().toLowerCase();
-  const hash = hashPasswordSha256(password);
 
   const res = await dbQuery<{
     id: string;
@@ -171,9 +173,11 @@ export async function authenticateSocialHubUser(
 
   if (res.rows.length === 0) return null;
   const row = res.rows[0];
-  if (!row.password_hash || row.password_hash !== hash) {
+  const check = verifyPassword(password, row.password_hash);
+  if (!row.password_hash || !check.ok) {
     return null;
   }
+  if (check.needsRehash) await dbQuery('UPDATE users SET password_hash = $2 WHERE id = $1', [row.id, hashPassword(password)]);
 
   await dbQuery('UPDATE users SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1', [row.id]);
 
@@ -231,7 +235,7 @@ export async function registerSocialHubUser(input: {
   const cleanEmail = String(input.email || '').trim().toLowerCase();
   const cleanName = String(input.name || '').trim();
   const cleanCompany = String(input.companyName || '').trim();
-  const passwordHash = hashPasswordSha256(input.password);
+  const passwordHash = hashPassword(input.password);
 
   return await withTransaction(async (tx) => {
     const existingEmail = await tx.query<{ id: string }>(

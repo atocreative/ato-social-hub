@@ -59,7 +59,7 @@ import {
   isDatabaseUnavailableSimulated,
   isRailwayDatabaseUrlConfigured,
 } from './src/db/pool.ts';
-import { runDatabaseMigrations, getAppliedMigrations } from './src/db/migrations.ts';
+import { runDatabaseMigrations, getAppliedMigrations, checkDeployReadiness } from './src/db/migrations.ts';
 import {
   ensureDefaultAdminUser,
   authenticateAdminUser,
@@ -1397,6 +1397,17 @@ function getKnownFoldersList(): {
 // MIDDLEWARES DE AUTENTICAÇÃO
 // ----------------------------------------------------
 
+/** SESSIONS_VALID_AFTER (ISO): tokens emitidos antes do corte são recusados. Valor inválido derruba a sessão (falha fechada). */
+export function isSessionRevoked(decoded: { iat?: number } | null | undefined, rawCutoff = process.env.SESSIONS_VALID_AFTER): boolean {
+  const raw = String(rawCutoff || '').trim();
+  if (!raw) return false;
+  const cutoffMs = Date.parse(raw);
+  if (!Number.isFinite(cutoffMs)) return true;
+  const iatMs = Number(decoded?.iat) * 1000;
+  if (!Number.isFinite(iatMs)) return true;
+  return iatMs < cutoffMs;
+}
+
 // 1. Autenticação para Usuários do Painel (JWT para Admin e Tenant)
 export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const { JWT_SECRET } = getEnv();
@@ -1410,6 +1421,9 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as UserProfile;
+    if (isSessionRevoked(decoded as any)) {
+      return res.status(401).json({ error: 'Sessão encerrada por segurança. Faça login novamente.' });
+    }
     req.user = decoded;
     next();
   } catch {
@@ -1460,8 +1474,10 @@ export function requireWebhookOrUserAuth(req: AuthenticatedRequest, res: Respons
   if (token) {
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as UserProfile;
-      req.user = decoded;
-      return next();
+      if (!isSessionRevoked(decoded as any)) {
+        req.user = decoded;
+        return next();
+      }
     } catch {
       // Ignora erro JWT e retorna 401 JSON limpo abaixo
     }
@@ -1476,6 +1492,25 @@ export function requireWebhookOrUserAuth(req: AuthenticatedRequest, res: Respons
 // ----------------------------------------------------
 // 1. ROTAS DE AUTENTICAÇÃO (ADMIN & INSTAGRAM OAUTH OFICIAL)
 // ----------------------------------------------------
+
+// RECUPERAÇÃO: registradas ANTES das rotas antigas (a primeira rota que casa vence).
+app.get('/api/health', async (_req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    const r = await checkDeployReadiness();
+    if (r.ready) return res.json({ status: 'ok', database: 'ok' });
+    console.error('[Health] Não pronto: ' + r.reasons.join(', '));
+    return res.status(503).json({ status: 'degraded', database: r.reasons.includes('database_unavailable') ? 'unavailable' : 'ok', ready: false });
+  } catch {
+    return res.status(503).json({ status: 'degraded', database: 'unavailable' });
+  }
+});
+// Rotas que emitem sessão sem validar identidade ou expõem estado: fechadas na recuperação.
+app.post('/api/auth/instagram/simulate', (_req: Request, res: Response) => res.status(404).json({ error: 'Rota não encontrada.' }));
+app.post('/api/auth/instagram', (_req: Request, res: Response) =>
+  res.status(410).json({ error: 'Este acesso foi desativado. Entre com e-mail e senha.' })
+);
+app.get('/api/debug/state', requireAuth, requireAdmin, (_req: Request, _res: Response, next: NextFunction) => next());
 
 // A. Login no ATO Social Hub via E-mail e Senha (suporta ADMIN e clientes TENANT cadastrados)
 app.post('/api/auth/login', async (req: Request, res: Response) => {
@@ -7261,6 +7296,9 @@ function requireSchedulerOrAdminAuth(req: AuthenticatedRequest, res: Response, n
     }
     try {
       const decoded = jwt.verify(bearer, JWT_SECRET) as UserProfile;
+      if (isSessionRevoked(decoded as any)) {
+        return res.status(401).json({ error: 'Token de autorização inválido para o agendador.' });
+      }
       req.user = decoded;
       return next();
     } catch {
