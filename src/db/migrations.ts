@@ -1,9 +1,38 @@
+import crypto from 'node:crypto';
 import { dbQuery, withTransaction } from './pool.ts';
+
+// SHA-256 (sem sal) da senha padrão antiga do administrador. Só é usado para BLOQUEAR sua gravação (migração 009).
+const RETIRED_DEFAULT_PASSWORD_SHA256 = crypto.createHash('sha256').update('666666').digest('hex');
+
+/** Divide o SQL em comandos por ';', sem quebrar blocos entre $$ ... $$ (corpos de função). */
+export function splitSqlStatements(sql: string): string[] {
+  const out: string[] = [];
+  let buf = '';
+  let inDollar = false;
+  for (let i = 0; i < sql.length; i++) {
+    if (sql.startsWith('$$', i)) {
+      inDollar = !inDollar;
+      buf += '$$';
+      i += 1;
+      continue;
+    }
+    if (sql[i] === ';' && !inDollar) {
+      if (buf.trim()) out.push(buf.trim());
+      buf = '';
+      continue;
+    }
+    buf += sql[i];
+  }
+  if (buf.trim()) out.push(buf.trim());
+  return out;
+}
 
 export interface MigrationDefinition {
   version: string;
   name: string;
   sql: string;
+  /** SQL opcional para reverter a migração (somente objetos criados por ela; nunca dados de negócio). */
+  down?: string;
 }
 
 export const POSTGRES_MIGRATIONS: MigrationDefinition[] = [
@@ -407,6 +436,94 @@ export const POSTGRES_MIGRATIONS: MigrationDefinition[] = [
       ALTER TABLE rejections ADD COLUMN IF NOT EXISTS ativa_na_memoria BOOLEAN NOT NULL DEFAULT TRUE;
     `,
   },
+  {
+    version: '008_oauth_state_and_pending_connections',
+    name: 'Estado OAuth e seleção de conta Instagram persistidos no PostgreSQL (multi-instância, expiração e uso único)',
+    sql: `
+      CREATE TABLE IF NOT EXISTS oauth_states (
+        nonce VARCHAR(128) PRIMARY KEY,
+        user_id VARCHAR(128) NOT NULL,
+        role VARCHAR(32) NOT NULL,
+        tenant_id VARCHAR(128),
+        drive_folder_name VARCHAR(255),
+        redirect_uri TEXT NOT NULL,
+        browser_binding VARCHAR(128) NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMPTZ NOT NULL,
+        consumed_at TIMESTAMPTZ
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_oauth_states_expires_at ON oauth_states(expires_at);
+
+      CREATE TABLE IF NOT EXISTS oauth_used_codes (
+        code_hash VARCHAR(128) PRIMARY KEY,
+        used_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMPTZ NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS oauth_pending_connections (
+        id VARCHAR(128) PRIMARY KEY,
+        secret_hash VARCHAR(128) NOT NULL,
+        user_id VARCHAR(128) NOT NULL,
+        role VARCHAR(32) NOT NULL,
+        tenant_id VARCHAR(128),
+        drive_folder_name VARCHAR(255),
+        encrypted_access_token TEXT NOT NULL,
+        token_type VARCHAR(32) NOT NULL,
+        token_issued_at TIMESTAMPTZ NOT NULL,
+        token_expires_at TIMESTAMPTZ,
+        granted_scopes JSONB NOT NULL DEFAULT '[]'::jsonb,
+        accounts JSONB NOT NULL DEFAULT '[]'::jsonb,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        expires_at TIMESTAMPTZ NOT NULL,
+        consumed_at TIMESTAMPTZ
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_oauth_pending_expires_at ON oauth_pending_connections(expires_at)
+    `,
+    down: `
+      DROP TABLE IF EXISTS oauth_pending_connections;
+      DROP TABLE IF EXISTS oauth_used_codes;
+      DROP TABLE IF EXISTS oauth_states
+    `,
+  },
+  {
+    version: '009_block_retired_default_password',
+    name: 'Impede que a senha padrão antiga do administrador volte a ser gravada (inclusive por versões antigas do código)',
+    sql: `
+      CREATE OR REPLACE FUNCTION ato_block_retired_default_password() RETURNS trigger AS $$
+      DECLARE
+        existing_hash TEXT;
+      BEGIN
+        IF NEW.password_hash = '${RETIRED_DEFAULT_PASSWORD_SHA256}' THEN
+          IF TG_OP = 'UPDATE' THEN
+            IF OLD.password_hash IS DISTINCT FROM NEW.password_hash THEN
+              NEW.password_hash := OLD.password_hash;
+            END IF;
+          ELSE
+            SELECT password_hash INTO existing_hash FROM users WHERE id = NEW.id;
+            IF FOUND THEN
+              NEW.password_hash := existing_hash;
+            ELSE
+              NEW.password_hash := 'disabled$blocked_retired_default_password';
+            END IF;
+          END IF;
+        END IF;
+        RETURN NEW;
+      END
+      $$ LANGUAGE plpgsql;
+
+      DROP TRIGGER IF EXISTS trg_users_block_retired_default_password ON users;
+
+      CREATE TRIGGER trg_users_block_retired_default_password
+      BEFORE INSERT OR UPDATE OF password_hash ON users
+      FOR EACH ROW EXECUTE FUNCTION ato_block_retired_default_password()
+    `,
+    down: `
+      DROP TRIGGER IF EXISTS trg_users_block_retired_default_password ON users;
+      DROP FUNCTION IF EXISTS ato_block_retired_default_password()
+    `,
+  },
 ];
 
 export const ALL_MANAGED_TABLES = [
@@ -556,10 +673,7 @@ export async function runDatabaseMigrations(): Promise<{
     }
 
     await withTransaction(async (tx) => {
-      const statements = migration.sql
-        .split(';')
-        .map((s) => s.trim())
-        .filter((s) => s.length > 0);
+      const statements = splitSqlStatements(migration.sql);
       for (const stmt of statements) {
         await tx.query(stmt);
       }
@@ -576,6 +690,23 @@ export async function runDatabaseMigrations(): Promise<{
   await reconcileLegacyColumns();
 
   return { applied, alreadyApplied };
+}
+
+/**
+ * Reverte UMA migração que possua `down` (remove apenas as tabelas auxiliares que ela criou).
+ * Uso: tsx src/db/cli.ts rollback <versão>. Não toca em dados de negócio.
+ */
+export async function rollbackMigration(version: string): Promise<boolean> {
+  const migration = POSTGRES_MIGRATIONS.find((m) => m.version === version);
+  if (!migration || !migration.down) {
+    throw new Error(`Migração ${version} não existe ou não é reversível.`);
+  }
+  await withTransaction(async (tx) => {
+    const statements = splitSqlStatements(migration.down!);
+    for (const stmt of statements) await tx.query(stmt);
+    await tx.query('DELETE FROM schema_migrations WHERE version = $1', [version]);
+  });
+  return true;
 }
 
 export async function getAppliedMigrations(): Promise<
@@ -596,3 +727,28 @@ export async function getAppliedMigrations(): Promise<
   }
 }
 
+
+/**
+ * Prontidão para receber tráfego (usada pelo healthcheck do Railway). Só devolve motivos genéricos, sem dados.
+ * "Pronto" exige: banco responde, TODAS as migrações definidas no código estão aplicadas e nenhum usuário
+ * mantém a senha padrão aposentada. Assim, o Railway só troca a versão em produção depois que a migração
+ * terminou e o administrador foi rotacionado; caso contrário a versão anterior continua no ar.
+ */
+export async function checkDeployReadiness(): Promise<{ ready: boolean; reasons: string[] }> {
+  const reasons: string[] = [];
+  try {
+    await dbQuery('SELECT 1');
+  } catch {
+    return { ready: false, reasons: ['database_unavailable'] };
+  }
+  const applied = new Set((await getAppliedMigrations()).map((m) => m.version));
+  const missing = POSTGRES_MIGRATIONS.filter((m) => !applied.has(m.version)).map((m) => m.version);
+  if (missing.length > 0) reasons.push(`migrations_pending:${missing.join(',')}`);
+  try {
+    const res = await dbQuery<any>(`SELECT 1 FROM users WHERE password_hash = $1 LIMIT 1`, [RETIRED_DEFAULT_PASSWORD_SHA256]);
+    if (res.rows.length > 0) reasons.push('retired_default_password_present');
+  } catch {
+    reasons.push('users_check_failed');
+  }
+  return { ready: reasons.length === 0, reasons };
+}

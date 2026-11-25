@@ -51,7 +51,19 @@ import {
   getInstagramLoginConfigId,
   exchangeUnifiedLoginCode,
   fetchAssignedInstagramAccounts,
+  verifyUnifiedLoginToken,
+  probeContentPublishPermission,
 } from './src/services/instagramCore.ts';
+import {
+  OAUTH_STATE_TTL_MS,
+  sha256Hex,
+  newOpaqueSecret,
+  createOAuthState,
+  consumeOAuthState,
+  markOAuthCodeUsed,
+  createPendingConnection,
+  consumePendingConnection,
+} from './src/services/oauthStore.ts';
 import {
   DatabaseUnavailableError,
   checkDatabaseConnection,
@@ -59,7 +71,7 @@ import {
   isDatabaseUnavailableSimulated,
   isRailwayDatabaseUrlConfigured,
 } from './src/db/pool.ts';
-import { runDatabaseMigrations, getAppliedMigrations } from './src/db/migrations.ts';
+import { runDatabaseMigrations, getAppliedMigrations, checkDeployReadiness } from './src/db/migrations.ts';
 import {
   ensureDefaultAdminUser,
   authenticateAdminUser,
@@ -1397,6 +1409,22 @@ function getKnownFoldersList(): {
 // MIDDLEWARES DE AUTENTICAÇÃO
 // ----------------------------------------------------
 
+/**
+ * Revogação de sessões sem trocar nenhuma chave: se SESSIONS_VALID_AFTER (data ISO, ex.: 2026-11-25T12:00:00Z)
+ * estiver definida, todo JWT emitido antes dela é recusado. Útil depois de trocar a senha do administrador.
+ * Não altera JWT_SECRET nem TOKEN_ENCRYPTION_KEY, então as conexões Instagram continuam legíveis.
+ * Valor inválido derruba a sessão (falha fechada) em vez de ser ignorado.
+ */
+export function isSessionRevoked(decoded: { iat?: number } | null | undefined, rawCutoff = process.env.SESSIONS_VALID_AFTER): boolean {
+  const raw = String(rawCutoff || '').trim();
+  if (!raw) return false;
+  const cutoffMs = Date.parse(raw);
+  if (!Number.isFinite(cutoffMs)) return true;
+  const iatMs = Number(decoded?.iat) * 1000;
+  if (!Number.isFinite(iatMs)) return true;
+  return iatMs < cutoffMs;
+}
+
 // 1. Autenticação para Usuários do Painel (JWT para Admin e Tenant)
 export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const { JWT_SECRET } = getEnv();
@@ -1410,6 +1438,9 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as UserProfile;
+    if (isSessionRevoked(decoded as any)) {
+      return res.status(401).json({ error: 'Sessão encerrada por segurança. Faça login novamente.' });
+    }
     req.user = decoded;
     next();
   } catch {
@@ -1460,8 +1491,10 @@ export function requireWebhookOrUserAuth(req: AuthenticatedRequest, res: Respons
   if (token) {
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as UserProfile;
-      req.user = decoded;
-      return next();
+      if (!isSessionRevoked(decoded as any)) {
+        req.user = decoded;
+        return next();
+      }
     } catch {
       // Ignora erro JWT e retorna 401 JSON limpo abaixo
     }
@@ -1478,6 +1511,26 @@ export function requireWebhookOrUserAuth(req: AuthenticatedRequest, res: Respons
 // ----------------------------------------------------
 
 // A. Login no ATO Social Hub via E-mail e Senha (suporta ADMIN e clientes TENANT cadastrados)
+// Verificação de saúde para o Railway (healthcheck) e para conferência pós-deploy. Pública, sem dados internos:
+// só informa se o processo responde e se o PostgreSQL atende uma consulta trivial.
+let healthCache: { at: number; ready: boolean; reasons: string[] } | null = null;
+app.get('/api/health', async (_req: Request, res: Response) => {
+  res.setHeader('Cache-Control', 'no-store');
+  try {
+    // Cache curto: o Railway consulta com frequência.
+    if (!healthCache || Date.now() - healthCache.at > 5000) {
+      const r = await checkDeployReadiness();
+      healthCache = { at: Date.now(), ...r };
+      if (!r.ready) console.error(`[Health] Não pronto: ${r.reasons.join(', ')}`);
+    }
+    if (healthCache.ready) return res.json({ status: 'ok', database: 'ok' });
+    const dbDown = healthCache.reasons.includes('database_unavailable');
+    return res.status(503).json({ status: 'degraded', database: dbDown ? 'unavailable' : 'ok', ready: false });
+  } catch {
+    return res.status(503).json({ status: 'degraded', database: 'unavailable' });
+  }
+});
+
 app.post('/api/auth/login', async (req: Request, res: Response) => {
   loadDatabaseFromDisk();
   const { JWT_SECRET } = getEnv();
@@ -1757,164 +1810,40 @@ app.post('/api/account/delete', requireAuth, async (req: AuthenticatedRequest, r
   return res.json({ success: true });
 });
 
-// B2. Sincronizar conta autenticada via popup OAuth entre domínios (garante persistência imediata no PostgreSQL sem expor token ao frontend)
+// B2. Ressincroniza o estado da sessão após o popup OAuth.
+// Seguro por construção: o callback já persistiu a conexão no servidor (token somente no backend).
+// Esta rota NÃO aceita token, username, instagramUserId nem tenant vindos do navegador; devolve apenas
+// a conta que pertence ao usuário autenticado. Nenhum dado do body altera conta alguma.
 app.post('/api/auth/instagram/sync-session', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  if (!testStateOverrideActive) {
+    await syncStateFromPostgres(true).catch(() => undefined);
+  }
   loadDatabaseFromDisk();
   const { JWT_SECRET } = getEnv();
-  const encKey = getTokenEncryptionKey();
+  const encKey = getTokenEncryptionKey() || JWT_SECRET;
   const user = req.user!;
-  const bodyTenant = req.body?.tenant || {};
+
+  // Descarta o ticket de uso único (compatibilidade com clientes antigos); ele nunca concede acesso.
   const syncTicket = typeof req.body?.syncTicket === 'string' ? req.body.syncTicket.trim() : '';
+  if (syncTicket) consumeSyncTicket(syncTicket);
 
-  let ticketPayload: {
-    purpose?: string;
-    tenantId?: string;
-    username?: string;
-    nome?: string;
-    instagramUserId?: string;
-    accountType?: string;
-    avatarUrl?: string;
-    encryptedAccessToken?: string;
-    tokenIssuedAt?: string;
-    tokenExpiresAt?: string;
-    grantedScopes?: string[];
-    driveFolderName?: string | null;
-    driveFolderId?: string | null;
-  } | null = null;
+  const ownTenantId = user.role === 'TENANT' ? user.tenantId : undefined;
+  const requestedId = typeof req.body?.tenant?.id === 'string' ? req.body.tenant.id : undefined;
+  const targetId = ownTenantId || (user.role === 'ADMIN' ? requestedId : undefined);
+  const targetTenant = targetId ? tenants.find((t) => t.id === targetId) : undefined;
 
-  if (syncTicket) {
-    // Ticket de uso único: consumido aqui, não pode ser reaproveitado.
-    ticketPayload = consumeSyncTicket(syncTicket) as any;
-  }
-
-  const rawUsername = String(
-    ticketPayload?.username || bodyTenant.username || user.instagramUsername || req.body?.username || ''
-  )
-    .replace(/^@/, '')
-    .trim();
-  const rawNome = String(ticketPayload?.nome || bodyTenant.nome || user.nome || rawUsername).trim();
-
-  if (!rawUsername) {
-    return res.status(400).json({ error: 'Conta inválida para sincronização.' });
-  }
-
-  let targetTenant = tenants.find(
-    (t) =>
-      (ticketPayload?.tenantId && t.id === ticketPayload.tenantId) ||
-      (bodyTenant.id && t.id === bodyTenant.id) ||
-      (ticketPayload?.instagramUserId && t.instagramUserId === ticketPayload.instagramUserId) ||
-      (bodyTenant.instagramUserId && t.instagramUserId === bodyTenant.instagramUserId) ||
-      t.username.toLowerCase() === rawUsername.toLowerCase() ||
-      (user.role === 'TENANT' && user.tenantId && t.id === user.tenantId)
-  );
-
-  // Nunca aceita nem retorna token em texto puro; utiliza apenas ticket assinado pelo backend (ou legado criptografado)
-  const incomingEncryptedToken =
-    ticketPayload?.encryptedAccessToken ||
-    bodyTenant.encryptedAccessToken ||
-    undefined;
-  const incomingIssuedAt =
-    ticketPayload?.tokenIssuedAt || bodyTenant.tokenIssuedAt || user.tokenIssuedAt || undefined;
-  const incomingExpiresAt =
-    ticketPayload?.tokenExpiresAt || bodyTenant.tokenExpiresAt || user.tokenExpiresAt || undefined;
-  const incomingScopes =
-    Array.isArray(ticketPayload?.grantedScopes) && ticketPayload!.grantedScopes.length > 0
-      ? ticketPayload!.grantedScopes
-      : Array.isArray(bodyTenant.grantedScopes) && bodyTenant.grantedScopes.length > 0
-      ? bodyTenant.grantedScopes
-      : Array.isArray(user.grantedScopes) && user.grantedScopes.length > 0
-      ? user.grantedScopes
-      : [...REQUIRED_IG_SCOPES];
-
-  const incomingFolderName =
-    ticketPayload?.driveFolderName || bodyTenant.driveFolderName || targetTenant?.driveFolderName || null;
-  const incomingFolderId =
-    ticketPayload?.driveFolderId || bodyTenant.driveFolderId || targetTenant?.driveFolderId || null;
-
-  if (!testStateOverrideActive && incomingEncryptedToken) {
-    targetTenant = await TokenService.persistValidatedAccountToken({
-      username: rawUsername,
-      nome: rawNome,
-      instagramUserId: String(
-        ticketPayload?.instagramUserId ||
-          bodyTenant.instagramUserId ||
-          targetTenant?.instagramUserId ||
-          bodyTenant.id ||
-          user.instagramUserId ||
-          rawUsername
-      ),
-      accountType: ticketPayload?.accountType || bodyTenant.account_type || targetTenant?.account_type,
-      avatarUrl: ticketPayload?.avatarUrl || bodyTenant.avatarUrl || targetTenant?.avatarUrl,
-      encryptedAccessToken: incomingEncryptedToken,
-      tokenType: (ticketPayload as any)?.tokenType || 'LONG_LIVED',
-      tokenIssuedAt: incomingIssuedAt,
-      tokenExpiresAt: incomingExpiresAt,
-      grantedScopes: incomingScopes,
-      preferredTenantId: targetTenant?.id || ticketPayload?.tenantId || bodyTenant.id || null,
-      driveFolderName: incomingFolderName,
-      driveFolderId: incomingFolderId,
-    });
-    await syncStateFromPostgres();
-  } else if (!targetTenant) {
-    targetTenant = {
-      id: String(
-        ticketPayload?.tenantId || bodyTenant.id || user.tenantId || `tenant_${rawUsername}_${Date.now()}`
-      ),
-      username: rawUsername,
-      nome: rawNome,
-      instagramUserId: String(
-        ticketPayload?.instagramUserId ||
-          bodyTenant.instagramUserId ||
-          bodyTenant.id ||
-          user.instagramUserId ||
-          user.tenantId ||
-          rawUsername
-      ),
-      account_type: ticketPayload?.accountType || bodyTenant.account_type || undefined,
-      avatarUrl: ticketPayload?.avatarUrl || bodyTenant.avatarUrl || '',
-      status: incomingFolderName ? 'APROVADO' : 'PENDENTE',
-      driveFolderName: incomingFolderName,
-      driveFolderId: incomingFolderId,
-      requestedAt: new Date().toISOString(),
-      encryptedAccessToken: incomingEncryptedToken,
-      tokenType: (ticketPayload as any)?.tokenType || 'LONG_LIVED',
-      tokenIssuedAt: incomingIssuedAt || new Date().toISOString(),
-      tokenExpiresAt: incomingExpiresAt,
-      grantedScopes: incomingScopes,
-      connectionStatus: incomingEncryptedToken ? 'CONECTADO' : 'RECONEXAO_NECESSARIA',
-    };
-    tenants.push(targetTenant);
-    saveDatabaseToDisk();
-  } else {
-    if (incomingEncryptedToken) {
-      targetTenant.encryptedAccessToken = incomingEncryptedToken;
-      targetTenant.tokenType = (ticketPayload as any)?.tokenType || targetTenant.tokenType || 'LONG_LIVED';
-      targetTenant.tokenIssuedAt =
-        incomingIssuedAt || targetTenant.tokenIssuedAt || new Date().toISOString();
-      targetTenant.tokenExpiresAt = incomingExpiresAt || targetTenant.tokenExpiresAt;
-      targetTenant.grantedScopes = incomingScopes;
-      restoreAccountOnReconnect(targetTenant);
-    }
-    if (incomingFolderName && !targetTenant.driveFolderName) {
-      targetTenant.driveFolderName = incomingFolderName;
-      targetTenant.driveFolderId = incomingFolderId || incomingFolderName;
-    }
-    if (ticketPayload?.instagramUserId || bodyTenant.instagramUserId) {
-      targetTenant.instagramUserId = String(
-        ticketPayload?.instagramUserId || bodyTenant.instagramUserId
-      );
-    }
-    saveDatabaseToDisk();
+  if (!targetTenant) {
+    return res.status(404).json({ error: 'Conta não encontrada para esta sessão.' });
   }
 
   return res.json({
     success: true,
-    tenant: sanitizeTenantForClient(targetTenant!, encKey || JWT_SECRET),
+    tenant: sanitizeTenantForClient(targetTenant, encKey),
   });
 });
 
-// B3. Rota Pública de Diagnóstico (GET /api/debug/state) para auditoria do .data/database.json
-app.get('/api/debug/state', (_req: Request, res: Response) => {
+// B3. Diagnóstico do estado (somente ADMIN autenticado): lista contas de todas as empresas, portanto nunca pode ser pública.
+app.get('/api/debug/state', requireAuth, requireAdmin, (_req: AuthenticatedRequest, res: Response) => {
   loadDatabaseFromDisk();
   const { JWT_SECRET } = getEnv();
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
@@ -2001,33 +1930,6 @@ function consumeSyncTicket(id: string): SyncTicketPayload | null {
   return entry.payload;
 }
 
-// Armazena nonces e códigos já usados (valor = momento do uso) por 15 minutos, para impedir reuso.
-const consumedOAuthStateNonces = new Map<string, number>();
-const consumedOAuthCodes = new Map<string, number>();
-const OAUTH_REPLAY_WINDOW_MS = 15 * 60 * 1000;
-
-function markOAuthValueUsed(store: Map<string, number>, value: string): boolean {
-  const now = Date.now();
-  for (const [k, usedAt] of store) {
-    if (now - usedAt > OAUTH_REPLAY_WINDOW_MS) store.delete(k);
-  }
-  if (store.has(value)) return false;
-  store.set(value, now);
-  return true;
-}
-const issuedOAuthStates = new Map<
-  string,
-  {
-    nonce: string;
-    issuedAt: number;
-    redirectUri: string;
-    userId?: string;
-    role?: string;
-    preferredTenantId?: string;
-    driveFolderName?: string;
-  }
->();
-
 export interface SanitizedOAuthDiagnosticEntry {
   timestamp: string;
   step: string;
@@ -2047,23 +1949,7 @@ export interface SanitizedOAuthDiagnosticEntry {
   userMessage?: string;
 }
 
-const oauthCallbackDiagnosticsLog: SanitizedOAuthDiagnosticEntry[] = [
-  {
-    timestamp: '2026-10-28T00:49:55.000Z',
-    step: '2_GET_GRAPH_INSTAGRAM_ME',
-    success: false,
-    httpStatus: 400,
-    igUserId: '29378328498437876',
-    fbtraceId: 'AWsN8ik5PocJIArFw4j8yzw',
-    metaErrorCode: 100,
-    metaErrorType: 'IGApiException',
-    metaErrorMessage: 'Unsupported request - method type: get',
-    endpointConsulted: 'https://graph.instagram.com/v21.0/me',
-    fieldsRequested: 'user_id,username',
-    reasonCode: 'ACCOUNT_NOT_AUTHORIZED_OR_PERSONAL',
-    userMessage: IG_USER_MSG_PERMISSION_RESTRICTED,
-  },
-];
+const oauthCallbackDiagnosticsLog: SanitizedOAuthDiagnosticEntry[] = [];
 
 function recordSanitizedOAuthDiagnostic(entry: SanitizedOAuthDiagnosticEntry) {
   oauthCallbackDiagnosticsLog.unshift(entry);
@@ -2188,41 +2074,18 @@ function respondOAuthCallbackError(
   return res.status(httpStatus).json(payload);
 }
 
-// C. Obter URL Oficial de Autorização do Instagram OAuth 2.0 (API do Instagram com Login do Instagram)
-/**
- * Credenciais do app conforme o fluxo escolhido:
- * - instagram_login: app antigo (conta pessoal), variáveis INSTAGRAM_LEGACY_APP_ID / INSTAGRAM_LEGACY_APP_SECRET
- * - unified: app da empresa com login unificado, variáveis INSTAGRAM_APP_ID / INSTAGRAM_APP_SECRET
- */
-function getOAuthAppCredentials(mode: IgLoginMode): { clientId: string; clientSecret: string } {
-  if (mode === 'instagram_login') {
-    return {
-      clientId: sanitizeEnvValue(process.env.INSTAGRAM_LEGACY_APP_ID) || '1638364467693255',
-      clientSecret: sanitizeEnvValue(process.env.INSTAGRAM_LEGACY_APP_SECRET),
-    };
+// C. URL de autorização do Unified Login. Exige sessão autenticada no Social Hub (autenticação) antes de
+// pedir a autorização de acesso à conta Instagram.
+app.get('/api/auth/instagram/url', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
+  // A empresa do usuário é resolvida a partir do PostgreSQL (fonte da verdade), não de cache em memória.
+  if (!testStateOverrideActive) {
+    await syncStateFromPostgres(true).catch(() => undefined);
   }
-  const env = getEnv();
-  return { clientId: env.INSTAGRAM_APP_ID, clientSecret: env.INSTAGRAM_APP_SECRET };
-}
-
-/** Lê o fluxo gravado no state assinado (padrão: login unificado). */
-function readLoginModeFromState(state: unknown, secret: string): IgLoginMode {
-  if (typeof state !== 'string' || !state.trim()) return 'unified';
-  try {
-    const decoded = jwt.verify(state.trim(), secret) as { loginMode?: string };
-    return decoded.loginMode === 'instagram_login' ? 'instagram_login' : 'unified';
-  } catch {
-    return 'unified';
-  }
-}
-
-app.get('/api/auth/instagram/url', (req: Request, res: Response) => {
   loadDatabaseFromDisk();
-  // Somente o app da empresa (login unificado) é usado para conectar contas.
-  const loginMode: IgLoginMode = 'unified';
-  const { JWT_SECRET } = getEnv();
-  const { clientId, clientSecret } = getOAuthAppCredentials(loginMode);
+  // Somente o app da empresa (Unified Login) é usado. O fluxo antigo (Instagram Login) não é misturado.
+  const { JWT_SECRET, INSTAGRAM_APP_ID: clientId, INSTAGRAM_APP_SECRET: clientSecret } = getEnv();
   const effectiveRedirectUri = getEffectiveInstagramRedirectUri();
+  res.setHeader('Cache-Control', 'no-store');
 
   if (!clientId || isPlaceholderOrEmpty(clientId)) {
     return res.status(500).json({
@@ -2230,13 +2093,11 @@ app.get('/api/auth/instagram/url', (req: Request, res: Response) => {
       redirectUri: effectiveRedirectUri,
     });
   }
-
   if (!effectiveRedirectUri) {
     return res.status(500).json({
       error: 'Configuração inválida: defina INSTAGRAM_REDIRECT_URI (https) ou APP_URL no ambiente.',
     });
   }
-
   if (!clientSecret || isPlaceholderOrEmpty(clientSecret)) {
     return res.status(500).json({
       error: 'Configuração inválida: INSTAGRAM_APP_SECRET ausente ou contém placeholder.',
@@ -2245,105 +2106,87 @@ app.get('/api/auth/instagram/url', (req: Request, res: Response) => {
   }
 
   lastAuthorizedRedirectUri = effectiveRedirectUri;
-  let preferredTenantId =
-    typeof req.query.tenantId === 'string' && req.query.tenantId.trim()
-      ? req.query.tenantId.trim()
-      : undefined;
-  let requestedDriveFolderName =
+
+  // A identidade vem EXCLUSIVAMENTE da sessão autenticada no Social Hub (autenticação),
+  // nunca do Instagram. A autorização do Instagram só será vinculada a esta empresa.
+  const user = req.user!;
+  const queryTenantId =
+    typeof req.query.tenantId === 'string' && req.query.tenantId.trim() ? req.query.tenantId.trim() : undefined;
+  const queryFolder =
     typeof req.query.driveFolderName === 'string' && req.query.driveFolderName.trim()
       ? req.query.driveFolderName.trim()
       : typeof req.query.companyFolder === 'string' && req.query.companyFolder.trim()
       ? req.query.companyFolder.trim()
       : undefined;
 
-  let authenticatedUserId: string | undefined;
-  let authenticatedAdminId: string | undefined;
-  let authenticatedRole: 'ADMIN' | 'TENANT' | undefined;
+  let stateTenantId: string | undefined;
+  let stateFolder: string | undefined;
 
-  // Se houver sessão autenticada no header, valida permissão estrita sobre a empresa
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    try {
-      const decoded = jwt.verify(authHeader.substring(7).trim(), JWT_SECRET) as UserProfile;
-      if (decoded) {
-        authenticatedUserId = decoded.id;
-        authenticatedRole = decoded.role;
-        if (decoded.role === 'ADMIN') {
-          authenticatedAdminId = decoded.id;
-        } else if (decoded.role === 'TENANT') {
-          const userTenant = tenants.find((t) => t.id === decoded.tenantId);
-          const userFolder = (userTenant?.driveFolderName || decoded.driveFolderName || '').trim();
-
-          // Impede que um usuário TENANT tente conectar/vincular conta de outra empresa
-          if (preferredTenantId && preferredTenantId !== decoded.tenantId) {
-            const targetAcc = tenants.find((t) => t.id === preferredTenantId);
-            const targetFolder = (targetAcc?.driveFolderName || '').trim();
-            if (!userFolder || !targetFolder || userFolder.toLowerCase() !== targetFolder.toLowerCase()) {
-              return res.status(403).json({
-                error: 'Acesso negado: você só tem permissão para conectar ou reconectar contas da sua própria empresa.',
-              });
-            }
-          }
-
-          if (
-            requestedDriveFolderName &&
-            (!userFolder || requestedDriveFolderName.toLowerCase() !== userFolder.toLowerCase())
-          ) {
-            return res.status(403).json({
-              error: 'Acesso negado: você não possui permissão para vincular contas do Instagram a outra empresa.',
-            });
-          }
-
-          preferredTenantId = preferredTenantId || decoded.tenantId;
-          requestedDriveFolderName = userFolder || undefined;
-        }
-      }
-    } catch {
-      // ignora token inválido na geração pública
+  if (user.role === 'TENANT') {
+    const ownTenant = tenants.find((t) => t.id === user.tenantId);
+    if (!ownTenant) {
+      return res.status(403).json({ error: 'Sua empresa não foi encontrada. Entre em contato com o suporte.' });
     }
+    if (queryTenantId && queryTenantId !== ownTenant.id) {
+      return res.status(403).json({
+        error: 'Acesso negado: você só tem permissão para conectar ou reconectar contas da sua própria empresa.',
+      });
+    }
+    const ownFolder = (ownTenant.driveFolderName || '').trim();
+    if (queryFolder && (!ownFolder || queryFolder.toLowerCase() !== ownFolder.toLowerCase())) {
+      return res.status(403).json({
+        error: 'Acesso negado: você não possui permissão para vincular contas do Instagram a outra empresa.',
+      });
+    }
+    stateTenantId = ownTenant.id;
+    stateFolder = ownFolder || undefined;
+  } else if (user.role === 'ADMIN') {
+    stateTenantId = queryTenantId;
+    stateFolder = queryFolder;
   } else {
-    // Sem sessão autenticada, NUNCA permite passar preferredTenantId ou driveFolderName arbitrário na query!
-    preferredTenantId = undefined;
-    requestedDriveFolderName = undefined;
+    return res.status(403).json({ error: 'Perfil sem permissão para conectar contas do Instagram.' });
   }
 
   const stateNonce = nodeCrypto.randomUUID();
-  const signedState = jwt.sign(
-    {
-      purpose: 'instagram_oauth_state',
+  const bindingSecret = newOpaqueSecret();
+  try {
+    await createOAuthState({
       nonce: stateNonce,
+      userId: user.id,
+      role: user.role as 'ADMIN' | 'TENANT',
+      tenantId: stateTenantId,
+      driveFolderName: stateFolder,
       redirectUri: effectiveRedirectUri,
-      userId: authenticatedUserId,
-      adminId: authenticatedAdminId,
-      role: authenticatedRole,
-      preferredTenantId,
-      driveFolderName: requestedDriveFolderName,
-      loginMode,
-    },
-    JWT_SECRET,
-    { expiresIn: '15m' }
-  );
+      browserBindingHash: sha256Hex(bindingSecret),
+    });
+  } catch (err: any) {
+    console.error('[OAuth] Falha ao registrar state no PostgreSQL:', err?.message || err);
+    return res.status(503).json({
+      error: 'Serviço temporariamente indisponível. Tente novamente em instantes.',
+    });
+  }
 
-  issuedOAuthStates.set(stateNonce, {
-    nonce: stateNonce,
-    issuedAt: Date.now(),
-    redirectUri: effectiveRedirectUri,
-    userId: authenticatedUserId,
-    role: authenticatedRole,
-    preferredTenantId,
-    driveFolderName: requestedDriveFolderName,
+  // O state é assinado (integridade) e referencia o registro no PostgreSQL (uso único + expiração).
+  const signedState = jwt.sign({ purpose: 'instagram_oauth_state', nonce: stateNonce }, JWT_SECRET, {
+    expiresIn: '10m',
+  });
+
+  // Amarra o fluxo ao navegador que o iniciou (cookie HttpOnly, só enviado ao callback).
+  res.cookie(IG_OAUTH_BINDING_COOKIE, bindingSecret, {
+    httpOnly: true,
+    secure: IS_PRODUCTION,
+    sameSite: 'lax',
+    path: '/api/auth/instagram',
+    maxAge: OAUTH_STATE_TTL_MS,
   });
 
   // Login unificado: as permissões vêm da configuração (config_id), não do parâmetro scope.
-  const baseAuthUrl = `${IG_OAUTH_DIALOG_URL}?client_id=${encodeURIComponent(clientId)}&config_id=${encodeURIComponent(getInstagramLoginConfigId())}&redirect_uri=${encodeURIComponent(effectiveRedirectUri)}&response_type=code&display=popup&prompt=login`;
-  const url_completa = `${baseAuthUrl}&state=${encodeURIComponent(signedState)}`;
-
-  console.log('[OAuth Authorize Redirect URI]:', effectiveRedirectUri);
+  const url_completa = `${IG_OAUTH_DIALOG_URL}?client_id=${encodeURIComponent(clientId)}&config_id=${encodeURIComponent(getInstagramLoginConfigId())}&redirect_uri=${encodeURIComponent(effectiveRedirectUri)}&response_type=code&display=popup&prompt=login&state=${encodeURIComponent(signedState)}`;
 
   return res.json({
     url: url_completa,
     state: signedState,
-    loginMode,
+    loginMode: 'unified',
     appId: clientId,
     redirectUri: effectiveRedirectUri,
     requiredScopes: REQUIRED_IG_SCOPES,
@@ -2367,15 +2210,15 @@ app.get('/api/instagram/app-review-status', (_req: Request, res: Response) => {
       : 'Modo Standard Access / Desenvolvimento: contas profissionais com função ativa no app Meta (Administradores, Desenvolvedores ou Instagram Testers que aceitaram o convite) conectam e publicam normalmente. Contas pessoais não são suportadas pela API Graph do Instagram. Para que qualquer conta profissional externa sem função no app Meta conecte diretamente, é obrigatório aprovar o Advanced Access no Meta App Review.',
     requiredPermissions: [
       {
-        scope: 'instagram_business_basic',
+        scope: 'instagram_basic',
         configuredInOAuthAuthorize: true,
         currentAccessLevel: advancedAccessApproved ? 'ADVANCED_ACCESS' : 'STANDARD_ACCESS',
         purpose:
-          'Ler a identidade básica da conta profissional do Instagram (@username, user_id, account_type) via GET https://graph.instagram.com/v21.0/me para vinculação segura à empresa.',
+          'Listar as contas profissionais do Instagram compartilhadas pelo cliente (GET https://graph.facebook.com/v27.0/me/assigned_instagram_accounts) e confirmar @username, ID e tipo da conta para vinculação segura à empresa.',
         requiredAccessLevel: 'Advanced Access (para clientes externos sem papel no app Meta)',
       },
       {
-        scope: 'instagram_business_content_publish',
+        scope: 'instagram_content_publish',
         configuredInOAuthAuthorize: true,
         currentAccessLevel: advancedAccessApproved ? 'ADVANCED_ACCESS' : 'STANDARD_ACCESS',
         purpose:
@@ -2406,99 +2249,44 @@ app.get('/api/instagram/app-review-status', (_req: Request, res: Response) => {
         url: getEffectiveInstagramRedirectUri(),
       },
       screencastGuide: [
-        '1. Demonstrar login no ATO Social Hub e clique no botão "Conectar com Instagram".',
-        '2. Mostrar o diálogo oficial de autorização do Instagram solicitando instagram_business_basic e instagram_business_content_publish.',
+        '1. Demonstrar o login no ATO Social Hub (e-mail e senha) e, dentro do painel, o clique em conectar/reconectar a conta do Instagram.',
+        '2. Mostrar o diálogo oficial de autorização (Unified Login) com as permissões instagram_basic e instagram_content_publish.',
         '3. Mostrar o retorno ao painel com a conta profissional (@username) exibida como Conectada.',
         '4. Demonstrar a aprovação de um criativo no painel e o disparo da publicação imediata ou agendada.',
         '5. Mostrar a publicação concluída no perfil do Instagram com o permalink retornado pela Graph API.',
       ],
       testingWithInstagramTesters: [
-        '1. Certifique-se de que a conta do cliente no Instagram está configurada como Conta Profissional (Business ou Creator). Contas Pessoais retornam IGApiException code 100 em GET /v21.0/me.',
-        '2. Enquanto o Advanced Access não estiver aprovado pela Meta, adicione a conta profissional em: Meta App Dashboard > Funções do App (App Roles) > Testadores do Instagram (Instagram Testers).',
-        '3. O titular da conta do Instagram deve aceitar o convite em: Instagram Web (www.instagram.com) > Configurações > Apps e sites > Convites de testador.',
-        '4. Após aceitar o convite e estar aprovada pelo Admin no ATO Social Hub, o cliente pode clicar em "Conectar com Instagram" e concluir o OAuth.',
+        '1. Certifique-se de que a conta do cliente no Instagram está configurada como Conta Profissional (Business ou Creator). Contas pessoais não são suportadas.',
+        '2. Enquanto o Advanced Access não estiver aprovado pela Meta, a pessoa que autoriza precisa ter função no app em: Meta App Dashboard > Funções do App (Administradores, Desenvolvedores ou Testadores).',
+        '3. Essa pessoa precisa compartilhar a conta profissional no diálogo de autorização (portfólio empresarial e ativos).',
+        '4. Depois de entrar no Social Hub com e-mail e senha, a conexão é iniciada pelo painel.',
       ],
     },
   });
 });
 
 // C1-B. Diagnóstico Comparativo do Erro 100 da Graph API (Seção 2 e 3 - Sem expor tokens)
-app.get('/api/instagram/oauth-diagnostics', (_req: Request, res: Response) => {
-  loadDatabaseFromDisk();
+app.get('/api/instagram/oauth-diagnostics', requireAuth, requireAdmin, (_req: AuthenticatedRequest, res: Response) => {
   const { INSTAGRAM_APP_ID } = getEnv();
   const advancedAccessApproved =
     String(process.env.META_ADVANCED_ACCESS_APPROVED || 'false').toLowerCase() === 'true';
-
-  const adminWorkingAccount = tenants.find(
-    (t) => t.username.toLowerCase() === 'ato.vc' || t.id === 'tenant_ato_vc'
-  );
-
   return res.json({
     generatedAt: new Date().toISOString(),
-    instagramLoginAppId: INSTAGRAM_APP_ID || '',
-    graphApiHost: 'https://graph.instagram.com',
-    graphApiVersion: 'v21.0',
+    loginModel: 'UNIFIED_LOGIN',
+    instagramAppId: INSTAGRAM_APP_ID || '',
+    configId: getInstagramLoginConfigId(),
+    graphApiHost: IG_UNIFIED_GRAPH_BASE_URL,
+    graphApiVersion: IG_UNIFIED_GRAPH_API_VERSION,
     appAccessLevel: advancedAccessApproved ? 'ADVANCED_ACCESS' : 'STANDARD_ACCESS',
     requestedPermissions: REQUIRED_IG_SCOPES,
-    comparison: {
-      accountA_workingAdminProfessional: {
-        label: 'Conta A — Conta Profissional Administradora (@ato.vc)',
-        username: adminWorkingAccount?.username || 'ato.vc',
-        instagramUserId: adminWorkingAccount?.instagramUserId || '17841449218493021',
-        accountType: adminWorkingAccount?.account_type || 'BUSINESS (Profissional)',
-        roleInMetaApp: 'Administrador / Desenvolvedor / Testador autorizado no App Meta',
-        instagramLoginAppId: INSTAGRAM_APP_ID || '',
-        requestedPermissions: REQUIRED_IG_SCOPES,
-        grantedPermissions: adminWorkingAccount?.grantedScopes || REQUIRED_IG_SCOPES,
-        appAccessLevelRequired: 'Standard Access é suficiente para contas com função ativa no App Meta',
-        step1_codeExchangeResponse: {
-          endpoint: 'POST https://api.instagram.com/oauth/access_token',
-          httpStatus: 200,
-          returnedAccessToken: '[REDACTED_VALID_TOKEN]',
-          returnedUserId: adminWorkingAccount?.instagramUserId || '17841449218493021',
-        },
-        step2_graphProfileQuery: {
-          host: 'https://graph.instagram.com',
-          apiVersion: 'v21.0',
-          minimalEndpoint: 'GET https://graph.instagram.com/v21.0/me?fields=user_id,username',
-          progressiveEndpoint: 'GET https://graph.instagram.com/v21.0/me?fields=id,user_id,username,account_type',
-          httpStatus: 200,
-          result: 'SUCESSO — Retorna user_id, username e account_type (BUSINESS/MEDIA_CREATOR)',
-        },
-      },
-      accountB_externalFailingCode100: {
-        label: 'Conta B — Conta Externa que retorna IGApiException código 100',
-        instagramUserId: '29378328498437876',
-        accountType:
-          'PERSONAL (Conta Pessoal sem nó IGUser no Graph API) OU Conta Profissional Externa sem função ativa no App Meta sob Standard Access',
-        roleInMetaApp: 'Sem função no App Meta (ou convite de Instagram Tester pendente de aceite)',
-        instagramLoginAppId: INSTAGRAM_APP_ID || '',
-        requestedPermissions: REQUIRED_IG_SCOPES,
-        grantedPermissions: REQUIRED_IG_SCOPES,
-        appAccessLevelRequired:
-          'Requer Conta Profissional (Business/Creator) + papel de Instagram Tester aceito (em Standard Access) OU aprovação de Advanced Access no Meta App Review',
-        step1_codeExchangeResponse: {
-          endpoint: 'POST https://api.instagram.com/oauth/access_token',
-          httpStatus: 200,
-          returnedAccessToken: '[REDACTED_TOKEN]',
-          returnedUserId: '29378328498437876',
-          note: 'O endpoint api.instagram.com/oauth/access_token emite código e token mesmo para contas pessoais ou sem acesso completo ao nó IGUser da Graph API.',
-        },
-        step2_graphProfileQuery: {
-          host: 'https://graph.instagram.com',
-          apiVersion: 'v21.0',
-          minimalEndpoint: 'GET https://graph.instagram.com/v21.0/me?fields=user_id,username',
-          httpStatus: 400,
-          errorType: 'IGApiException',
-          errorCode: 100,
-          errorMessage: 'Unsupported request - method type: get',
-          observedFbtraceIds: ['Ap7ZKT1rJVuI2ajxkJARh_k', 'AWsN8ik5PocJIArFw4j8yzw'],
-          rootCauseExplanation:
-            'Na API do Instagram com Login do Instagram (graph.instagram.com), o endpoint GET /v21.0/me resolve para o nó profissional IGUser. Quando o token pertence a uma Conta Pessoal (que não possui nó IGUser na Graph API) ou a uma conta externa não habilitada pelas permissões instagram_business_basic em Standard Access, a Meta bloqueia o método GET no objeto e retorna IGApiException código 100 ("Unsupported request - method type: get"). Além disso, IDs de 17 dígitos como 29378328498437876 excedem Number.MAX_SAFE_INTEGER (9007199254740991) em JavaScript se não forem extraídos como string bruta antes do JSON.parse.',
-        },
-      },
+    redirectUri: getEffectiveInstagramRedirectUri(),
+    endpoints: {
+      authorize: IG_OAUTH_DIALOG_URL,
+      tokenExchange: IG_UNIFIED_GRAPH_BASE_URL + '/' + IG_UNIFIED_GRAPH_API_VERSION + '/oauth/access_token',
+      tokenInspection: IG_UNIFIED_GRAPH_BASE_URL + '/' + IG_UNIFIED_GRAPH_API_VERSION + '/debug_token',
+      accountDiscovery: IG_UNIFIED_GRAPH_BASE_URL + '/' + IG_UNIFIED_GRAPH_API_VERSION + '/me/assigned_instagram_accounts',
     },
-    recentCallbackDiagnostics: oauthCallbackDiagnosticsLog,
+    recentSanitizedEvents: oauthCallbackDiagnosticsLog.slice(0, 20),
   });
 });
 
@@ -2588,948 +2376,532 @@ app.get('/api/version', (_req: Request, res: Response) => {
   });
 });
 
-// D. Rota Única de Callback OAuth Oficial do Instagram (Auditada e Sem Bypass)
-app.get('/api/auth/instagram/callback', async (req: Request, res: Response) => {
-  const { JWT_SECRET } = getEnv();
-  const cbLoginMode: IgLoginMode = readLoginModeFromState(req.query.state, JWT_SECRET);
-  const { clientId, clientSecret } = getOAuthAppCredentials(cbLoginMode);
-  const encKey = getTokenEncryptionKey();
+// D. Callback OAuth do Unified Login (Facebook Login for Business + config_id).
+// Princípios: (1) o callback NUNCA cria sessão no Social Hub; (2) a conta é vinculada ao usuário/empresa
+// que iniciou o fluxo autenticado (state no PostgreSQL); (3) vínculo por Instagram ID; (4) com várias contas
+// autorizadas, o usuário escolhe entre elas; (5) o token só existe no backend.
+const IG_OAUTH_BINDING_COOKIE = 'ig_oauth_bind';
+
+function readRequestCookie(req: Request, name: string): string {
+  const header = String(req.headers.cookie || '');
+  for (const part of header.split(';')) {
+    const idx = part.indexOf('=');
+    if (idx < 0) continue;
+    if (part.slice(0, idx).trim() === name) {
+      try {
+        return decodeURIComponent(part.slice(idx + 1).trim());
+      } catch {
+        return '';
+      }
+    }
+  }
+  return '';
+}
+
+function renderInstagramPopupPage(title: string, bodyHtml: string, script: string): string {
+  return `<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${escapeHtml(title)}</title>
+<style>
+body{background:#0A0A0A;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;box-sizing:border-box}
+.card{background:#121212;border:1px solid #242424;border-radius:16px;padding:32px 28px;text-align:center;max-width:400px;width:100%;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.logo{font-size:18px;font-weight:700;margin-bottom:20px;font-family:monospace}.logo span{color:#10B981}
+h2{margin:0 0 10px;font-size:18px;font-weight:600}p{color:#8E8E93;font-size:13px;line-height:1.5;margin:0 0 20px}
+.badge{display:inline-block;background:#1A1A1A;border:1px solid #2E2E2E;font-family:monospace;font-size:12px;padding:5px 12px;border-radius:8px;margin-bottom:20px}
+.acc{display:block;width:100%;background:#1A1A1A;border:1px solid #2E2E2E;color:#fff;font-family:monospace;font-size:14px;padding:12px;border-radius:10px;margin:0 0 10px;cursor:pointer}
+.acc:hover{border-color:#10B981}
+</style></head><body><div class="card"><div class="logo">ATO<span>.</span></div>${bodyHtml}</div>
+<script>${script}</script></body></html>`;
+}
+
+function renderInstagramConnectedPage(req: Request, tenantPayload: any, reconnectedByAdmin: boolean): string {
+  const authPayload = {
+    type: 'INSTAGRAM_AUTH_SUCCESS',
+    reconnectedByAdmin,
+    tenant: tenantPayload,
+  };
+  const script = `
+const appOrigin = ${safeJsonForHtml(getAppOrigin(req))};
+const authPayload = ${safeJsonForHtml(authPayload)};
+// Nenhum token de sessão ou de acesso é enviado ao navegador: o backend já salvou a conexão.
+if (window.opener && !window.opener.closed) {
+  try { window.opener.postMessage(authPayload, appOrigin); setTimeout(function(){ window.close(); }, 600); }
+  catch (e) { window.location.href = '/'; }
+} else { window.location.href = '/'; }`;
+  return renderInstagramPopupPage(
+    'Instagram conectado - ATO Social Hub',
+    `<h2>Conta conectada</h2><div class="badge">@${escapeHtml(tenantPayload?.username || '')}</div><p>Autorização concluída. Voltando ao painel...</p>`,
+    script
+  );
+}
+
+type OAuthLinkState = {
+  userId: string;
+  role: 'ADMIN' | 'TENANT';
+  tenantId: string | null;
+  driveFolderName: string | null;
+};
+
+type LinkResult =
+  | { ok: true; tenant: TenantAccount }
+  | { ok: false; status: number; reasonCode: string; userMessage: string; step: string };
+
+/**
+ * Valida a identidade da conta escolhida na Meta e a vincula à empresa do usuário autenticado.
+ * Nunca altera outra empresa.
+ */
+async function linkInstagramAccountToCompany(params: {
+  state: OAuthLinkState;
+  account: { id: string; username: string };
+  encryptedAccessToken: string;
+  tokenType: string;
+  tokenIssuedAt: string;
+  tokenExpiresAt: string | null;
+  grantedScopes: string[];
+}): Promise<LinkResult> {
   const fetchFn = getInstagramFetch();
-
-  const postRedirectUri = getEffectiveInstagramRedirectUri();
-  const authorizeRedirectUri = lastAuthorizedRedirectUri || postRedirectUri;
-  const redirectsIguais = authorizeRedirectUri === postRedirectUri;
-
-  console.log('[OAuth Redirect Comparison]', {
-    authorize_redirect_uri: authorizeRedirectUri,
-    post_redirect_uri: postRedirectUri,
-    iguais: redirectsIguais,
-  });
-
-  // 1. Interrompe antes de chamar a Meta caso INSTAGRAM_APP_ID ou INSTAGRAM_APP_SECRET estejam ausentes ou sejam placeholders
-  if (!clientId || isPlaceholderOrEmpty(clientId) || !clientSecret || isPlaceholderOrEmpty(clientSecret)) {
-    return respondOAuthCallbackError(req, res, 500, {
-      versao_codigo: 'v3_nova',
-      versao: 'v4_limpa_sem_callback_text',
-      falha_no_passo: 'CONFIGURACAO_CREDENCIAIS_INVALIDA',
-      reason_code: 'TEMPORARY_TECHNICAL_ERROR',
-      user_message: IG_USER_MSG_TEMPORARY_ERROR,
-      erro: 'As credenciais INSTAGRAM_APP_ID ou INSTAGRAM_APP_SECRET estão ausentes ou contêm um placeholder fictício no ambiente de execução.',
-      redirect_comparacao: {
-        authorize_redirect_uri: authorizeRedirectUri,
-        post_redirect_uri: postRedirectUri,
-        iguais: redirectsIguais,
-      },
-    });
+  const plainToken = TokenService.decrypt(params.encryptedAccessToken);
+  if (!plainToken) {
+    return { ok: false, status: 500, reasonCode: 'TEMPORARY_TECHNICAL_ERROR', userMessage: IG_USER_MSG_TEMPORARY_ERROR, step: '2_TOKEN_ILEGIVEL' };
   }
 
-  // 2. Validação estrita de state OAuth (autenticidade, correspondência de redirectUri e proteção contra CSRF e Replay)
-  let verifiedStateAdminId: string | null = null;
-  let verifiedStateUserId: string | null = null;
-  let verifiedStateRole: string | null = null;
-  let preferredTenantIdFromState: string | null = null;
-  let driveFolderNameFromState: string | null = null;
-
-  // state é obrigatório: sem ele não há como provar que o fluxo começou neste navegador (CSRF de login).
-  if (typeof req.query.state !== 'string' || req.query.state.trim() === '') {
-    return respondOAuthCallbackError(req, res, 400, {
-      versao_codigo: 'v3_nova',
-      versao: 'v4_limpa_sem_callback_text',
-      falha_no_passo: 'VALIDACAO_STATE_OAUTH',
-      reason_code: 'TEMPORARY_TECHNICAL_ERROR',
-      user_message: IG_USER_MSG_TEMPORARY_ERROR,
-      erro: 'Parâmetro state ausente. Inicie a conexão novamente pelo painel.',
-    });
-  }
-
-  if (typeof req.query.state === 'string' && req.query.state.trim() !== '') {
-    try {
-      const decodedState = jwt.verify(req.query.state.trim(), JWT_SECRET) as {
-        purpose?: string;
-        nonce?: string;
-        redirectUri?: string;
-        adminId?: string;
-        userId?: string;
-        role?: string;
-        preferredTenantId?: string;
-        driveFolderName?: string;
-      };
-      if (decodedState.purpose !== 'instagram_oauth_state') {
-        return respondOAuthCallbackError(req, res, 400, {
-          versao_codigo: 'v3_nova',
-          versao: 'v4_limpa_sem_callback_text',
-          falha_no_passo: 'VALIDACAO_STATE_OAUTH',
-          reason_code: 'TEMPORARY_TECHNICAL_ERROR',
-          user_message: IG_USER_MSG_TEMPORARY_ERROR,
-          erro: 'Parâmetro state inválido para o fluxo OAuth do Instagram.',
-        });
-      }
-
-      // Proteção contra Replay: cada state só pode ser utilizado uma única vez
-      if (!decodedState.nonce || !markOAuthValueUsed(consumedOAuthStateNonces, decodedState.nonce)) {
-        return respondOAuthCallbackError(req, res, 400, {
-          versao_codigo: 'v3_nova',
-          versao: 'v4_limpa_sem_callback_text',
-          falha_no_passo: 'VALIDACAO_STATE_OAUTH',
-          reason_code: 'TEMPORARY_TECHNICAL_ERROR',
-          user_message: IG_USER_MSG_TEMPORARY_ERROR,
-          erro: 'Parâmetro state ausente ou já utilizado (proteção contra CSRF e replay OAuth).',
-        });
-      }
-
-      // Valida correspondência entre redirect_uri da autorização iniciada e o callback
-      if (decodedState.redirectUri && decodedState.redirectUri !== postRedirectUri) {
-        return respondOAuthCallbackError(req, res, 400, {
-          versao_codigo: 'v3_nova',
-          versao: 'v4_limpa_sem_callback_text',
-          falha_no_passo: 'VALIDACAO_STATE_OAUTH',
-          reason_code: 'TEMPORARY_TECHNICAL_ERROR',
-          user_message: IG_USER_MSG_TEMPORARY_ERROR,
-          erro: 'Divergência de redirect_uri entre a autorização iniciada e o callback recebido.',
-        });
-      }
-
-      verifiedStateRole = decodedState.role || null;
-      verifiedStateUserId = decodedState.userId || decodedState.adminId || null;
-      if (decodedState.role === 'ADMIN' && (decodedState.adminId || decodedState.userId)) {
-        verifiedStateAdminId = decodedState.adminId || decodedState.userId || null;
-      }
-      if (decodedState.preferredTenantId) {
-        preferredTenantIdFromState = decodedState.preferredTenantId;
-      }
-      if (decodedState.driveFolderName) {
-        driveFolderNameFromState = decodedState.driveFolderName;
-      }
-    } catch {
-      return respondOAuthCallbackError(req, res, 400, {
-        versao_codigo: 'v3_nova',
-        versao: 'v4_limpa_sem_callback_text',
-        falha_no_passo: 'VALIDACAO_STATE_OAUTH',
-        reason_code: 'TEMPORARY_TECHNICAL_ERROR',
-        user_message: IG_USER_MSG_TEMPORARY_ERROR,
-        erro: 'Parâmetro state expirado ou assinatura inválida.',
+  // Etapa 2 — confirma a identidade diretamente na Graph API com o token recebido.
+  const profileUrl = `${igGraphBase('unified')}/${encodeURIComponent(params.account.id)}?fields=id,username,account_type&access_token=${encodeURIComponent(plainToken)}`;
+  let profile: any = {};
+  try {
+    const profRes = await fetchFn(profileUrl, { method: 'GET' });
+    const raw = await profRes.text().catch(() => '');
+    // Preserva IDs numéricos grandes sem perda de precisão.
+    const exactId = raw.match(/"id"\s*:\s*"?(\d+)"?/)?.[1];
+    profile = raw ? JSON.parse(raw) : {};
+    if (exactId) profile.id = exactId;
+    if (!profRes.ok || profile.error || !profile.username) {
+      recordSanitizedOAuthDiagnostic({
+        timestamp: new Date().toISOString(),
+        step: '2_GET_INSTAGRAM_ACCOUNT',
+        success: false,
+        httpStatus: profRes.status,
+        igUserId: params.account.id,
+        metaErrorCode: profile?.error?.code,
+        metaErrorType: profile?.error?.type,
+        metaErrorMessage: profile?.error?.message,
+        endpointConsulted: `${igGraphBase('unified')}/{ig-user-id}`,
+        fieldsRequested: 'id,username,account_type',
+        reasonCode: 'ACCOUNT_NOT_AUTHORIZED_IN_META_APP',
+        userMessage: IG_USER_MSG_PERMISSION_RESTRICTED,
       });
+      return { ok: false, status: 400, reasonCode: 'ACCOUNT_NOT_AUTHORIZED_IN_META_APP', userMessage: IG_USER_MSG_PERMISSION_RESTRICTED, step: '2_GET_INSTAGRAM_ACCOUNT' };
+    }
+  } catch {
+    return { ok: false, status: 502, reasonCode: 'TEMPORARY_TECHNICAL_ERROR', userMessage: IG_USER_MSG_TEMPORARY_ERROR, step: '2_GET_INSTAGRAM_ACCOUNT' };
+  }
+
+  // O ID devolvido pela Meta precisa ser exatamente o da conta escolhida/autorizada.
+  const verifiedIgId = String(profile.id || '').trim();
+  if (!verifiedIgId || verifiedIgId !== String(params.account.id)) {
+    return { ok: false, status: 400, reasonCode: 'IDENTITY_MISMATCH', userMessage: IG_USER_MSG_TEMPORARY_ERROR, step: '2_IDENTIDADE_DIVERGENTE' };
+  }
+  const realUsername = String(profile.username).replace(/^@/, '').trim();
+  const realAccountType = String(profile.account_type || '').trim().toUpperCase();
+  if (realAccountType === 'PERSONAL') {
+    return { ok: false, status: 400, reasonCode: 'PERSONAL_ACCOUNT_NOT_SUPPORTED', userMessage: IG_USER_MSG_PERSONAL_ACCOUNT, step: '2C_CONTA_PESSOAL_NAO_SUPORTADA' };
+  }
+
+  loadDatabaseFromDisk();
+  if (!testStateOverrideActive) {
+    await syncStateFromPostgres(true).catch(() => undefined);
+  }
+
+  // Etapa 3 — vínculo por Instagram ID, sempre dentro da empresa do usuário autenticado.
+  const { state } = params;
+  const stateTenant = state.tenantId ? tenants.find((t) => t.id === state.tenantId) : undefined;
+  const existingByIgId = tenants.find((t) => String(t.instagramUserId || '') === verifiedIgId);
+
+  if (state.role === 'TENANT' && !stateTenant) {
+    return { ok: false, status: 403, reasonCode: 'TENANT_NOT_FOUND', userMessage: 'Empresa não encontrada para esta sessão.', step: '3_EMPRESA_NAO_ENCONTRADA' };
+  }
+
+  const sameCompany = (a?: TenantAccount, b?: TenantAccount) => {
+    if (!a || !b) return false;
+    if (a.id === b.id) return true;
+    const fa = String(a.driveFolderName || '').trim().toLowerCase();
+    const fb = String(b.driveFolderName || '').trim().toLowerCase();
+    return Boolean(fa && fb && fa === fb);
+  };
+
+  if (existingByIgId && stateTenant && !sameCompany(existingByIgId, stateTenant)) {
+    return { ok: false, status: 403, reasonCode: 'CROSS_TENANT_VIOLATION', userMessage: 'Esta conta do Instagram já está vinculada a outra empresa.', step: '3_BLOQUEIO_VINCULACAO_OUTRA_EMPRESA' };
+  }
+
+  if (!existingByIgId && stateTenant) {
+    const prefIgId = String(stateTenant.instagramUserId || '').trim();
+    const isPlaceholder =
+      !prefIgId ||
+      prefIgId.startsWith('pending_ig_') ||
+      String(stateTenant.username || '').toLowerCase().startsWith('cadastro_') ||
+      stateTenant.connectionStatus === 'DESCONECTADO';
+    if (!isPlaceholder && prefIgId !== verifiedIgId && state.role !== 'ADMIN') {
+      return { ok: false, status: 403, reasonCode: 'CROSS_TENANT_VIOLATION', userMessage: 'A empresa atual já possui outra conta do Instagram vinculada. Peça ao administrador para trocá-la.', step: '3_EMPRESA_JA_POSSUI_OUTRA_CONTA' };
     }
   }
 
-  // Código de autorização da Meta é de uso único: impede reaproveitar o mesmo código.
-  if (
-    typeof req.query.code === 'string' &&
-    req.query.code.trim() !== '' &&
-    !markOAuthValueUsed(consumedOAuthCodes, req.query.code.trim())
-  ) {
-    return respondOAuthCallbackError(req, res, 400, {
-      versao_codigo: 'v3_nova',
-      versao: 'v4_limpa_sem_callback_text',
-      falha_no_passo: 'VALIDACAO_CODIGO_OAUTH',
-      reason_code: 'TEMPORARY_TECHNICAL_ERROR',
-      user_message: IG_USER_MSG_TEMPORARY_ERROR,
-      erro: 'Código de autorização já utilizado. Inicie a conexão novamente.',
-    });
+  const targetTenant = existingByIgId || stateTenant;
+  if (state.role === 'ADMIN' && !targetTenant && !state.driveFolderName) {
+    return { ok: false, status: 400, reasonCode: 'COMPANY_REQUIRED', userMessage: 'Selecione a empresa antes de conectar a conta do Instagram.', step: '3_EMPRESA_OBRIGATORIA' };
   }
 
-  if (!req.query.code || typeof req.query.code !== 'string') {
-    const safeErrorQuery = {
-      error: req.query.error,
-      error_code: req.query.error_code,
-      error_type: req.query.error_type,
-      error_reason: req.query.error_reason,
-      error_message: req.query.error_message,
-      error_description: req.query.error_description,
-    };
-    const combinedErrorText = JSON.stringify(safeErrorQuery).toLowerCase();
-    const isStandardAccessExternalBlock =
-      combinedErrorText.includes('insufficient developer role') ||
-      combinedErrorText.includes('tester') ||
-      combinedErrorText.includes('app_not_installed') ||
-      combinedErrorText.includes('unauthorized') ||
-      combinedErrorText.includes('not authorized') ||
-      combinedErrorText.includes('invalid scopes');
-
-    const stepName = isStandardAccessExternalBlock
-      ? 'EXTERNAL_ACCOUNT_NOT_AUTHORIZED_IN_STANDARD_ACCESS'
-      : '0_CALLBACK_SEM_CODE';
-    const userMsg = isStandardAccessExternalBlock
-      ? IG_USER_MSG_PERMISSION_RESTRICTED
-      : IG_USER_MSG_TEMPORARY_ERROR;
-
-    recordSanitizedOAuthDiagnostic({
-      timestamp: new Date().toISOString(),
-      step: stepName,
-      success: false,
-      httpStatus: 400,
-      metaErrorMessage: String(req.query.error_message || req.query.error_description || req.query.error || ''),
-      reasonCode: isStandardAccessExternalBlock
-        ? 'ACCOUNT_NOT_AUTHORIZED_IN_META_APP'
-        : 'TEMPORARY_TECHNICAL_ERROR',
-      userMessage: userMsg,
-    });
-
-    return respondOAuthCallbackError(req, res, 400, {
-      versao_codigo: 'v3_nova',
-      versao: 'v4_limpa_sem_callback_text',
-      falha_no_passo: stepName,
-      reason_code: isStandardAccessExternalBlock
-        ? 'ACCOUNT_NOT_AUTHORIZED_IN_META_APP'
-        : 'TEMPORARY_TECHNICAL_ERROR',
-      user_message: userMsg,
-      erro: isStandardAccessExternalBlock
-        ? IG_USER_MSG_PERMISSION_RESTRICTED
-        : 'O Instagram não retornou o código de autorização OAuth (o usuário cancelou ou a conta não possui permissão no app Meta).',
-      redirect_uri_usado: postRedirectUri,
-      redirect_comparacao: {
-        authorize_redirect_uri: authorizeRedirectUri,
-        post_redirect_uri: postRedirectUri,
-        iguais: redirectsIguais,
-      },
-      resposta_instagram: safeErrorQuery,
-    });
+  let effectiveDriveFolderName: string | null = null;
+  if (targetTenant?.status === 'APROVADO' && targetTenant.driveFolderName) {
+    effectiveDriveFolderName = targetTenant.driveFolderName;
+  } else if (state.role === 'ADMIN' && state.driveFolderName) {
+    effectiveDriveFolderName = state.driveFolderName;
   }
+  const effectiveDriveFolderId =
+    targetTenant?.driveFolderId ||
+    (effectiveDriveFolderName
+      ? driveFoldersMap.get(effectiveDriveFolderName.toLowerCase())?.id || effectiveDriveFolderName
+      : null);
 
   try {
-    const cleanCode = String(req.query.code || '').replace(/#_$/, '').trim();
-    let tokenRes: { ok: boolean; status: number };
-    let exactUserIdFromText = '';
-    let tokenData: any = {};
-    let unifiedExpiresInSeconds = 60 * 24 * 60 * 60; // 60 dias, padrão quando o retorno não informa expires_in
-
-    if (cbLoginMode === 'unified') {
-      // Etapa 1 — Login unificado: GET https://graph.facebook.com/v27.0/oauth/access_token (client_secret só no servidor)
-      const unifiedExchange = await exchangeUnifiedLoginCode({
-        code: cleanCode,
-        clientId,
-        clientSecret,
-        redirectUri: postRedirectUri,
-      });
-      tokenRes = { ok: unifiedExchange.ok, status: unifiedExchange.status };
-      unifiedExpiresInSeconds = unifiedExchange.expiresInSeconds;
-      // No login unificado o user_id não vem no token: ele é obtido em /me/assigned_instagram_accounts.
-      tokenData = unifiedExchange.raw && typeof unifiedExchange.raw === 'object' ? unifiedExchange.raw : {};
-      if (!unifiedExchange.ok && !tokenData.error) {
-        tokenData = { ...tokenData, error_type: 'OAuthException', error_message: 'Falha na troca do código' };
-      }
-    } else {
-      // Etapa 1 (login do Instagram antigo) — POST https://api.instagram.com/oauth/access_token
-      const formData = new URLSearchParams();
-      formData.append('client_id', clientId);
-      formData.append('client_secret', clientSecret);
-      formData.append('grant_type', 'authorization_code');
-      formData.append('redirect_uri', postRedirectUri);
-      formData.append('code', cleanCode);
-
-      const legacyTokenRes = await fetchFn('https://api.instagram.com/oauth/access_token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: formData.toString(),
-      });
-      tokenRes = legacyTokenRes;
-
-      const rawTokenText = await legacyTokenRes.text().catch(() => '');
-      const exactUserIdMatch = rawTokenText.match(/"user_id"\s*:\s*"?(\d+)"?/);
-      exactUserIdFromText = exactUserIdMatch ? exactUserIdMatch[1] : '';
-
-      try {
-        tokenData = rawTokenText ? JSON.parse(rawTokenText) : {};
-      } catch {
-        tokenData = {
-          error_type: 'InvalidJSONResponse',
-          error_message: rawTokenText || 'Empty response',
-        };
-      }
-    }
-
-    const rawAccessToken =
-      tokenData.access_token ||
-      (Array.isArray(tokenData.data) && tokenData.data[0]?.access_token) ||
-      '';
-    const igUserId = String(
-      exactUserIdFromText ||
-        tokenData.user_id ||
-        (Array.isArray(tokenData.data) && tokenData.data[0]?.user_id) ||
-        ''
-    ).trim();
-    const rawPermissions: string[] = Array.isArray(tokenData.permissions)
-      ? tokenData.permissions
-      : Array.isArray(tokenData.data) && Array.isArray(tokenData.data[0]?.permissions)
-      ? tokenData.data[0].permissions
-      : typeof tokenData.permissions === 'string'
-      ? tokenData.permissions.split(',').map((s: string) => s.trim()).filter(Boolean)
-      : [];
-
-    if (
-      !tokenRes.ok ||
-      tokenData.error_type ||
-      tokenData.error ||
-      !rawAccessToken ||
-      typeof rawAccessToken !== 'string' ||
-      !rawAccessToken.trim()
-    ) {
-      const { access_token: _omitToken, data: _omitData, ...safeTokenError } = tokenData || {};
-      const errText = JSON.stringify(safeTokenError).toLowerCase();
-      const isExternalTesterError =
-        errText.includes('insufficient developer role') ||
-        errText.includes('tester') ||
-        errText.includes('not a test user') ||
-        errText.includes('permission') ||
-        errText.includes('unauthorized');
-
-      const stepName = isExternalTesterError
-        ? 'EXTERNAL_ACCOUNT_NOT_AUTHORIZED_IN_STANDARD_ACCESS'
-        : '1_POST_OAUTH_ACCESS_TOKEN';
-      const userMsg = isExternalTesterError
-        ? IG_USER_MSG_PERMISSION_RESTRICTED
-        : IG_USER_MSG_TEMPORARY_ERROR;
-
-      recordSanitizedOAuthDiagnostic({
-        timestamp: new Date().toISOString(),
-        step: stepName,
-        success: false,
-        httpStatus: tokenRes.status || 400,
-        igUserId: igUserId || undefined,
-        metaErrorType: safeTokenError?.error_type || safeTokenError?.error?.type,
-        metaErrorCode: safeTokenError?.code || safeTokenError?.error?.code,
-        metaErrorMessage: safeTokenError?.error_message || safeTokenError?.error?.message,
-        endpointConsulted: 'https://api.instagram.com/oauth/access_token',
-        reasonCode: isExternalTesterError
-          ? 'ACCOUNT_NOT_AUTHORIZED_IN_META_APP'
-          : 'TEMPORARY_TECHNICAL_ERROR',
-        userMessage: userMsg,
-      });
-
-      return respondOAuthCallbackError(req, res, 400, {
-        versao_codigo: 'v3_nova',
-        versao: 'v4_limpa_sem_callback_text',
-        falha_no_passo: stepName,
-        reason_code: isExternalTesterError
-          ? 'ACCOUNT_NOT_AUTHORIZED_IN_META_APP'
-          : 'TEMPORARY_TECHNICAL_ERROR',
-        user_message: userMsg,
-        erro: isExternalTesterError
-          ? IG_USER_MSG_PERMISSION_RESTRICTED
-          : safeTokenError?.error_message || safeTokenError?.error?.message || IG_USER_MSG_TEMPORARY_ERROR,
-        status_http: tokenRes.status,
-        client_id_usado: clientId,
-        redirect_uri_usado: postRedirectUri,
-        redirect_comparacao: {
-          authorize_redirect_uri: authorizeRedirectUri,
-          post_redirect_uri: postRedirectUri,
-          iguais: redirectsIguais,
-        },
-        resposta_instagram: safeTokenError,
-      });
-    }
-
-    const shortLivedToken = rawAccessToken.trim();
-
-    // Etapa 1B — Valida permissões concedidas
-    if (rawPermissions.length > 0) {
-      const scopeValidation = hasRequiredInstagramScopes(rawPermissions);
-      if (!scopeValidation.valid) {
-        recordSanitizedOAuthDiagnostic({
-          timestamp: new Date().toISOString(),
-          step: '1B_PERMISSOES_INSUFICIENTES',
-          success: false,
-          httpStatus: 400,
-          igUserId: igUserId || undefined,
-          grantedScopes: rawPermissions,
-          reasonCode: 'INSUFFICIENT_SCOPES',
-          userMessage: IG_USER_MSG_PERMISSION_RESTRICTED,
-        });
-
-        return respondOAuthCallbackError(req, res, 400, {
-          versao_codigo: 'v3_nova',
-          versao: 'v4_limpa_sem_callback_text',
-          falha_no_passo: '1B_PERMISSOES_INSUFICIENTES',
-          reason_code: 'INSUFFICIENT_SCOPES',
-          user_message: IG_USER_MSG_PERMISSION_RESTRICTED,
-          permissoes_recebidas: rawPermissions,
-          permissoes_faltantes: scopeValidation.missingScopes,
-          erro: IG_USER_MSG_PERMISSION_RESTRICTED,
-        });
-      }
-    }
-
-    const grantedScopes =
-      rawPermissions.length > 0 ? rawPermissions : [...REQUIRED_IG_SCOPES];
-
-    // Etapa 1.5 — Token de longa duração.
-    // Login unificado: o token de usuário de sistema já vem com validade definida pela configuração (sem ig_exchange_token).
-    // Login do Instagram antigo: troca ig_exchange_token para token de 60 dias.
-    const longLivedExchange: {
-      ok: boolean;
-      accessToken: string;
-      tokenType: string;
-      expiresInSeconds: number;
-      tokenIssuedAt: string;
-      tokenExpiresAt: string;
-      errorMessage?: string;
-    } =
-      cbLoginMode === 'unified'
-        ? {
-            ok: true,
-            accessToken: shortLivedToken,
-            tokenType: UNIFIED_TOKEN_TYPE,
-            expiresInSeconds: unifiedExpiresInSeconds,
-            tokenIssuedAt: new Date().toISOString(),
-            tokenExpiresAt: new Date(Date.now() + unifiedExpiresInSeconds * 1000).toISOString(),
-          }
-        : await exchangeShortForLongLivedInstagramToken({ shortLivedToken, clientSecret });
-    const finalAccessToken = longLivedExchange.accessToken;
-    const encryptedAccessToken = encryptInstagramToken(finalAccessToken, encKey || JWT_SECRET);
-
-    // Etapa 2A — Descoberta da conta profissional.
-    // Login unificado: GET https://graph.facebook.com/v27.0/me/assigned_instagram_accounts?fields=id,username
-    // Login do Instagram antigo: GET https://graph.instagram.com/v21.0/me?fields=user_id,username
-    let minimalEndpoint: string;
-    let minimalFields: string;
-    let selectedAccount: { id: string; username: string } | undefined;
-    let minProfileRes: { ok: boolean; status: number };
-    let minRawText: string;
-    if (cbLoginMode === 'unified') {
-      minimalEndpoint = `${igGraphBase('unified')}/me/assigned_instagram_accounts`;
-      minimalFields = 'id,username';
-      const assigned = await fetchAssignedInstagramAccounts(finalAccessToken);
-      selectedAccount = assigned.accounts[0];
-      minProfileRes = { ok: assigned.ok && Boolean(selectedAccount), status: assigned.status || 400 };
-      minRawText = JSON.stringify(assigned.raw ?? {});
-    } else {
-      minimalEndpoint = 'https://graph.instagram.com/v21.0/me';
-      minimalFields = 'user_id,username';
-      const minimalUrl = `${minimalEndpoint}?fields=${minimalFields}&access_token=${encodeURIComponent(finalAccessToken)}`;
-      const legacyMinRes = await fetchFn(minimalUrl, { method: 'GET' });
-      minProfileRes = { ok: legacyMinRes.ok, status: legacyMinRes.status };
-      minRawText = await legacyMinRes.text().catch(() => '');
-    }
-    const minExactUserId = minRawText.match(/"user_id"\s*:\s*"?(\d+)"?/)?.[1];
-    const minExactId = minRawText.match(/"id"\s*:\s*"?(\d+)"?/)?.[1];
-
-    let minProfileData: any = {};
-    try {
-      minProfileData = minRawText ? JSON.parse(minRawText) : {};
-    } catch {
-      minProfileData = {
-        error: { message: minRawText || 'Invalid JSON response from Graph API' },
-      };
-    }
-    if (minExactUserId) minProfileData.user_id = minExactUserId;
-    if (minExactId) minProfileData.id = minExactId;
-    if (selectedAccount) {
-      minProfileData = {
-        id: selectedAccount.id,
-        user_id: selectedAccount.id,
-        username: selectedAccount.username,
-      };
-    }
-
-    if (!minProfileRes.ok || minProfileData.error || minProfileData.error_type || !minProfileData.username) {
-      const fbtraceId =
-        minProfileData?.error?.fbtrace_id || minProfileData?.fbtrace_id || undefined;
-      const metaCode = minProfileData?.error?.code ?? minProfileData?.code;
-      const metaType = String(minProfileData?.error?.type || minProfileData?.error_type || '');
-      const metaMsg = String(
-        minProfileData?.error?.message ||
-          minProfileData?.error_message ||
-          'Unsupported request - method type: get'
-      );
-      const lowerMsg = metaMsg.toLowerCase();
-
-      const isExplicitPersonal =
-        lowerMsg.includes('personal') || lowerMsg.includes('conta pessoal');
-      const isPermissionOrCode100 =
-        metaCode === 100 ||
-        metaCode === 10 ||
-        metaCode === 200 ||
-        metaType === 'IGApiException' ||
-        metaType === 'OAuthException' ||
-        lowerMsg.includes('unsupported request') ||
-        lowerMsg.includes('permission') ||
-        lowerMsg.includes('unauthorized');
-
-      const userMessage = isExplicitPersonal
-        ? IG_USER_MSG_PERSONAL_ACCOUNT
-        : minProfileRes.status >= 500
-        ? IG_USER_MSG_TEMPORARY_ERROR
-        : isPermissionOrCode100
-        ? IG_USER_MSG_PERMISSION_RESTRICTED
-        : IG_USER_MSG_TEMPORARY_ERROR;
-
-      const reasonCode = isExplicitPersonal
-        ? 'PERSONAL_ACCOUNT_NOT_SUPPORTED'
-        : minProfileRes.status >= 500
-        ? 'TEMPORARY_TECHNICAL_ERROR'
-        : isPermissionOrCode100
-        ? 'ACCOUNT_NOT_AUTHORIZED_IN_META_APP'
-        : 'TEMPORARY_TECHNICAL_ERROR';
-
-      recordSanitizedOAuthDiagnostic({
-        timestamp: new Date().toISOString(),
-        step: '2_GET_GRAPH_INSTAGRAM_ME',
-        success: false,
-        httpStatus: minProfileRes.status || 400,
-        igUserId: igUserId || undefined,
-        fbtraceId,
-        metaErrorCode: typeof metaCode === 'number' ? metaCode : undefined,
-        metaErrorType: metaType || undefined,
-        metaErrorMessage: metaMsg,
-        endpointConsulted: minimalEndpoint,
-        fieldsRequested: minimalFields,
-        grantedScopes,
-        reasonCode,
-        userMessage,
-      });
-
-      const { access_token: _stripTok, ...safeGraphError } = minProfileData || {};
-
-      return respondOAuthCallbackError(req, res, minProfileRes.status >= 500 ? 502 : 400, {
-        versao_codigo: 'v3_nova',
-        versao: 'v4_limpa_sem_callback_text',
-        falha_no_passo: '2_GET_GRAPH_INSTAGRAM_ME',
-        reason_code: reasonCode,
-        user_message: userMessage,
-        status_http: minProfileRes.status || 400,
-        ig_user_id: igUserId || null,
-        fbtrace_id: fbtraceId || null,
-        endpoint_consultado: `${minimalEndpoint}?fields=${minimalFields}`,
-        resposta_instagram: safeGraphError,
-      });
-    }
-
-    // Etapa 2B — Consulta progressiva de campos adicionais (id, user_id, username, account_type)
-    const progressiveFields =
-      cbLoginMode === 'unified' ? 'id,username,account_type' : 'id,user_id,username,account_type';
-    const progressiveUrl =
-      cbLoginMode === 'unified'
-        ? `${igGraphBase('unified')}/${encodeURIComponent(selectedAccount?.id || '')}?fields=${progressiveFields}&access_token=${encodeURIComponent(finalAccessToken)}`
-        : `${minimalEndpoint}?fields=${progressiveFields}&access_token=${encodeURIComponent(finalAccessToken)}`;
-    let profileData: any = { ...minProfileData };
-
-    try {
-      const progRes = await fetchFn(progressiveUrl, { method: 'GET' });
-      const progRawText = await progRes.text().catch(() => '');
-      const progExactUserId = progRawText.match(/"user_id"\s*:\s*"?(\d+)"?/)?.[1];
-      const progExactId = progRawText.match(/"id"\s*:\s*"?(\d+)"?/)?.[1];
-      const progParsed = progRawText ? JSON.parse(progRawText) : {};
-      if (progExactUserId) progParsed.user_id = progExactUserId;
-      if (progExactId) progParsed.id = progExactId;
-
-      if (progRes.ok && !progParsed.error && !progParsed.error_type && progParsed.username) {
-        profileData = {
-          ...profileData,
-          ...progParsed,
-        };
-      }
-    } catch {
-      // Preserva os campos já validados na consulta mínima 2A
-    }
-
-    const realUsername = String(profileData.username).replace(/^@/, '').trim();
-    const realName = realUsername;
-    const resolvedIgUserId = String(
-      profileData.user_id || igUserId || profileData.id
-    ).trim();
-    const realAccountType = String(profileData.account_type || '').trim().toUpperCase();
-    const realAvatarUrl = String(profileData.profile_picture_url || '').trim();
-
-    // Etapa 2C — Bloqueio estrito de Contas Pessoais (Seções 3 e 5)
-    if (realAccountType === 'PERSONAL') {
-      recordSanitizedOAuthDiagnostic({
-        timestamp: new Date().toISOString(),
-        step: '2C_CONTA_PESSOAL_NAO_SUPORTADA',
-        success: false,
-        httpStatus: 400,
-        igUserId: resolvedIgUserId,
-        username: realUsername,
-        accountType: realAccountType,
-        endpointConsulted: minimalEndpoint,
-        fieldsRequested: progressiveFields,
-        grantedScopes,
-        reasonCode: 'PERSONAL_ACCOUNT_NOT_SUPPORTED',
-        userMessage: IG_USER_MSG_PERSONAL_ACCOUNT,
-      });
-
-      return respondOAuthCallbackError(req, res, 400, {
-        versao_codigo: 'v3_nova',
-        versao: 'v4_limpa_sem_callback_text',
-        falha_no_passo: '2C_CONTA_PESSOAL_NAO_SUPORTADA',
-        reason_code: 'PERSONAL_ACCOUNT_NOT_SUPPORTED',
-        user_message: IG_USER_MSG_PERSONAL_ACCOUNT,
-        status_http: 400,
-        ig_user_id: resolvedIgUserId,
-        account_type: realAccountType,
-        erro: IG_USER_MSG_PERSONAL_ACCOUNT,
-      });
-    }
-
-    loadDatabaseFromDisk();
-
-    // Etapa 3 — Associação Legítima entre Identidade, Usuário e Empresa (Seções 1 e 4)
-    // NUNCA vincula automaticamente um novo usuário a uma empresa ativa apenas por existir uma pasta padrão!
-    const existingByIdentity = tenants.find(
-      (t) =>
-        t.instagramUserId === resolvedIgUserId ||
-        t.id === resolvedIgUserId ||
-        t.username.toLowerCase() === realUsername.toLowerCase()
-    );
-
-    const existingByPreferredState = preferredTenantIdFromState
-      ? tenants.find((t) => t.id === preferredTenantIdFromState)
-      : undefined;
-
-    // Verifica tentativa de vinculação indevida a outra empresa (Cross-Tenant Violation)
-    if (
-      existingByIdentity &&
-      existingByPreferredState &&
-      existingByIdentity.id !== existingByPreferredState.id
-    ) {
-      const idFolder = (existingByIdentity.driveFolderName || '').trim().toLowerCase();
-      const prefFolder = (existingByPreferredState.driveFolderName || '').trim().toLowerCase();
-      if (idFolder && prefFolder && idFolder !== prefFolder) {
-        return respondOAuthCallbackError(req, res, 403, {
-          versao_codigo: 'v3_nova',
-          versao: 'v4_limpa_sem_callback_text',
-          falha_no_passo: '3_BLOQUEIO_VINCULACAO_OUTRA_EMPRESA',
-          reason_code: 'CROSS_TENANT_VIOLATION',
-          user_message: 'Esta conta do Instagram já está vinculada a outra empresa.',
-          status_http: 403,
-          ig_user_id: resolvedIgUserId,
-          erro: 'Bloqueio de segurança multiempresa: a conta do Instagram já pertence a outra empresa.',
-        });
-      }
-    }
-
-    if (
-      existingByIdentity &&
-      existingByIdentity.driveFolderName &&
-      driveFolderNameFromState &&
-      existingByIdentity.driveFolderName.toLowerCase() !== driveFolderNameFromState.toLowerCase()
-    ) {
-      return respondOAuthCallbackError(req, res, 403, {
-        versao_codigo: 'v3_nova',
-        versao: 'v4_limpa_sem_callback_text',
-        falha_no_passo: '3_BLOQUEIO_VINCULACAO_OUTRA_EMPRESA',
-        reason_code: 'CROSS_TENANT_VIOLATION',
-        user_message: 'Esta conta do Instagram já está vinculada a outra empresa.',
-        status_http: 403,
-        ig_user_id: resolvedIgUserId,
-        erro: 'Bloqueio de segurança multiempresa: tentativa de vincular conta a empresa divergente.',
-      });
-    }
-
-    // Se o fluxo veio de um usuário autenticado (preferredTenantIdFromState), verifica se o registro alvo não pertence a outro Instagram já ativo
-    if (!existingByIdentity && existingByPreferredState) {
-      const prefIgId = String(existingByPreferredState.instagramUserId || '').trim();
-      const prefUsername = String(existingByPreferredState.username || '').trim().toLowerCase();
-      const isPlaceholderAccount =
-        prefIgId.startsWith('pending_ig_') ||
-        prefUsername.startsWith('cadastro_') ||
-        existingByPreferredState.connectionStatus === 'DESCONECTADO';
-
-      if (
-        !isPlaceholderAccount &&
-        prefIgId !== resolvedIgUserId &&
-        prefUsername !== realUsername.toLowerCase() &&
-        verifiedStateRole !== 'ADMIN'
-      ) {
-        return respondOAuthCallbackError(req, res, 403, {
-          versao_codigo: 'v3_nova',
-          versao: 'v4_limpa_sem_callback_text',
-          falha_no_passo: '3_BLOQUEIO_VINCULACAO_OUTRA_EMPRESA',
-          reason_code: 'CROSS_TENANT_VIOLATION',
-          user_message: 'A empresa atual já possui outra conta do Instagram vinculada.',
-          status_http: 403,
-          ig_user_id: resolvedIgUserId,
-          erro: 'Bloqueio de segurança multiempresa: tentativa de substituir conta Instagram de outra empresa sem privilégio.',
-        });
-      }
-    }
-
-    let targetTenant = existingByIdentity || existingByPreferredState;
-
-    // A conta só terá empresa vinculada (driveFolderName) se:
-    // a) já era aprovada anteriormente no banco, OU
-    // b) a autorização foi iniciada por um administrador autenticado informando a pasta, OU
-    // c) a autorização foi iniciada por um usuário autenticado cujo cadastro já havia sido aprovado pelo Admin.
-    let effectiveDriveFolderName: string | null = null;
-    if (targetTenant?.status === 'APROVADO' && targetTenant.driveFolderName) {
-      effectiveDriveFolderName = targetTenant.driveFolderName;
-    } else if (verifiedStateAdminId && driveFolderNameFromState) {
-      effectiveDriveFolderName = driveFolderNameFromState;
-    }
-
-    const effectiveDriveFolderId =
-      targetTenant?.driveFolderId ||
-      (effectiveDriveFolderName
-        ? driveFoldersMap.get(effectiveDriveFolderName.toLowerCase())?.id || effectiveDriveFolderName
-        : null);
-
-    const effectiveStatus: TenantAccount['status'] = effectiveDriveFolderName
-      ? 'APROVADO'
-      : 'AGUARDANDO_APROVACAO';
-
-    if (!testStateOverrideActive) {
-      targetTenant = await TokenService.persistValidatedAccountToken({
-        username: realUsername,
-        nome:
-          targetTenant?.nome && !targetTenant.nome.startsWith('cadastro_')
-            ? targetTenant.nome
-            : realName,
-        instagramUserId: resolvedIgUserId,
-        accountType: realAccountType || 'BUSINESS',
-        avatarUrl: realAvatarUrl || undefined,
-        plainAccessToken: finalAccessToken,
-        tokenType: longLivedExchange.tokenType,
-        tokenIssuedAt: longLivedExchange.tokenIssuedAt,
-        tokenExpiresAt: longLivedExchange.tokenExpiresAt,
-        grantedScopes,
-        preferredTenantId: targetTenant?.id || preferredTenantIdFromState,
-        driveFolderName: effectiveDriveFolderName,
-        driveFolderId: effectiveDriveFolderId,
-        status: effectiveStatus,
-      });
-      await syncStateFromPostgres();
-    } else if (!targetTenant) {
-      targetTenant = {
-        id:
-          preferredTenantIdFromState ||
-          `tenant_${realUsername.toLowerCase().replace(/[^a-z0-9]+/g, '_')}`,
-        username: realUsername,
-        nome: realName,
-        instagramUserId: resolvedIgUserId,
-        account_type: realAccountType || 'BUSINESS',
-        avatarUrl: realAvatarUrl,
-        status: effectiveStatus,
-        driveFolderName: effectiveDriveFolderName,
-        driveFolderId: effectiveDriveFolderId,
-        requestedAt: new Date().toISOString(),
-        encryptedAccessToken,
-        tokenType: longLivedExchange.tokenType,
-        tokenIssuedAt: longLivedExchange.tokenIssuedAt,
-        tokenExpiresAt: longLivedExchange.tokenExpiresAt,
-        lastTokenRefreshAt: longLivedExchange.tokenIssuedAt,
-        grantedScopes,
-        connectionStatus: 'CONECTADO',
-        lastConnectionError: null,
-        reconnectionRequiredAt: null,
-        hasValidToken: true,
-      };
-      tenants.push(targetTenant);
-      saveDatabaseToDisk();
-    } else {
-      targetTenant.username = realUsername;
-      targetTenant.nome =
-        targetTenant.nome && !targetTenant.nome.startsWith('cadastro_')
-          ? targetTenant.nome
-          : realName;
-      targetTenant.instagramUserId = resolvedIgUserId;
-      targetTenant.account_type = realAccountType || 'BUSINESS';
-      if (realAvatarUrl) targetTenant.avatarUrl = realAvatarUrl;
-      targetTenant.driveFolderName = effectiveDriveFolderName;
-      targetTenant.driveFolderId = effectiveDriveFolderId;
-      targetTenant.status = effectiveStatus;
-      targetTenant.encryptedAccessToken = encryptedAccessToken;
-      delete targetTenant.accessToken;
-      delete targetTenant.access_token;
-      targetTenant.tokenType = longLivedExchange.tokenType;
-      targetTenant.tokenIssuedAt = longLivedExchange.tokenIssuedAt;
-      targetTenant.tokenExpiresAt = longLivedExchange.tokenExpiresAt;
-      targetTenant.lastTokenRefreshAt = longLivedExchange.tokenIssuedAt;
-      targetTenant.grantedScopes = grantedScopes;
-      targetTenant.lastSyncAt = new Date().toISOString();
-      restoreAccountOnReconnect(targetTenant);
-      targetTenant.status = effectiveStatus;
-      saveDatabaseToDisk();
-    }
-
+    const saved = await TokenService.persistValidatedAccountToken({
+      username: realUsername,
+      nome:
+        targetTenant?.nome && !targetTenant.nome.startsWith('cadastro_') ? targetTenant.nome : realUsername,
+      instagramUserId: verifiedIgId,
+      accountType: realAccountType || 'BUSINESS',
+      encryptedAccessToken: params.encryptedAccessToken,
+      tokenType: params.tokenType,
+      tokenIssuedAt: params.tokenIssuedAt,
+      tokenExpiresAt: params.tokenExpiresAt || undefined,
+      grantedScopes: params.grantedScopes,
+      preferredTenantId: targetTenant?.id || null,
+      driveFolderName: effectiveDriveFolderName,
+      driveFolderId: effectiveDriveFolderId,
+      status: effectiveDriveFolderName ? 'APROVADO' : 'AGUARDANDO_APROVACAO',
+    });
+    await syncStateFromPostgres(true).catch(() => undefined);
     recordSanitizedOAuthDiagnostic({
       timestamp: new Date().toISOString(),
       step: '3_CONEXAO_VALIDADA_COM_SUCESSO',
       success: true,
       httpStatus: 200,
-      igUserId: resolvedIgUserId,
+      igUserId: verifiedIgId,
       username: realUsername,
       accountType: realAccountType || 'BUSINESS',
-      endpointConsulted: minimalEndpoint,
-      fieldsRequested: progressiveFields,
-      grantedScopes,
+      endpointConsulted: `${igGraphBase('unified')}/{ig-user-id}`,
+      fieldsRequested: 'id,username,account_type',
+      grantedScopes: params.grantedScopes,
+    });
+    return { ok: true, tenant: saved };
+  } catch (err: any) {
+    const msg = String(err?.message || '');
+    if (msg.startsWith('CROSS_TENANT_VIOLATION')) {
+      return { ok: false, status: 403, reasonCode: 'CROSS_TENANT_VIOLATION', userMessage: 'Esta conta do Instagram já está vinculada a outra empresa.', step: '3_BLOQUEIO_VINCULACAO_OUTRA_EMPRESA' };
+    }
+    if (msg.startsWith('USERNAME_CONFLICT')) {
+      return { ok: false, status: 409, reasonCode: 'USERNAME_CONFLICT', userMessage: 'Este @ já está associado a outro cadastro. Solicite ajuda ao administrador.', step: '3_CONFLITO_USERNAME' };
+    }
+    console.error('[OAuth] Falha ao persistir conexão:', msg);
+    return { ok: false, status: 500, reasonCode: 'TEMPORARY_TECHNICAL_ERROR', userMessage: IG_USER_MSG_TEMPORARY_ERROR, step: '3_PERSISTENCIA' };
+  }
+}
+
+app.get('/api/auth/instagram/callback', async (req: Request, res: Response) => {
+  const { JWT_SECRET, INSTAGRAM_APP_ID: clientId, INSTAGRAM_APP_SECRET: clientSecret } = getEnv();
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+
+  const fail = (status: number, step: string, reasonCode: string, userMessage: string, detail?: string) =>
+    respondOAuthCallbackError(req, res, status, {
+      falha_no_passo: step,
+      reason_code: reasonCode,
+      user_message: userMessage,
+      erro: detail || userMessage,
     });
 
-    // Importante (Seção 1):
-    // 1. O callback OAuth NUNCA cria sessões administrativas (role é estritamente 'TENANT').
-    // 2. O token do Instagram (nem mesmo criptografado) NUNCA é incluído em userProfile ou em tenant enviado ao frontend.
-    const userProfile: UserProfile = {
-      id: `usr_${targetTenant!.id}`,
-      nome: targetTenant!.nome,
-      role: 'TENANT',
-      tenantId: targetTenant!.id,
-      instagramUserId: targetTenant!.instagramUserId,
-      instagramUsername: targetTenant!.username,
-      status: targetTenant!.status,
-      driveFolderName: targetTenant!.driveFolderName || null,
-      driveFolderId: targetTenant!.driveFolderId || null,
-      tokenIssuedAt: targetTenant!.tokenIssuedAt,
-      tokenExpiresAt: targetTenant!.tokenExpiresAt,
-      grantedScopes: targetTenant!.grantedScopes,
-      connectionStatus: 'CONECTADO',
-    };
+  if (!clientId || isPlaceholderOrEmpty(clientId) || !clientSecret || isPlaceholderOrEmpty(clientSecret)) {
+    return fail(500, 'CONFIGURACAO_CREDENCIAIS_INVALIDA', 'TEMPORARY_TECHNICAL_ERROR', IG_USER_MSG_TEMPORARY_ERROR, 'INSTAGRAM_APP_ID ou INSTAGRAM_APP_SECRET ausentes.');
+  }
+  const postRedirectUri = getEffectiveInstagramRedirectUri();
 
-    const token = jwt.sign(userProfile, JWT_SECRET, { expiresIn: '72h' });
-    const safeTenantPayload = {
-      ...sanitizeTenantForClient(targetTenant!, encKey || JWT_SECRET),
-      linkedByAdminId: verifiedStateAdminId || undefined,
-      linkedByUserId: verifiedStateUserId || undefined,
-    };
+  // 1. state: obrigatório, assinado, de uso único, com expiração e registrado no PostgreSQL.
+  const rawState = typeof req.query.state === 'string' ? req.query.state.trim() : '';
+  if (!rawState) {
+    return fail(400, 'VALIDACAO_STATE_OAUTH', 'INVALID_STATE', 'Sessão de conexão inválida. Inicie novamente pelo painel.', 'Parâmetro state ausente.');
+  }
+  let nonce = '';
+  try {
+    const decoded = jwt.verify(rawState, JWT_SECRET) as { purpose?: string; nonce?: string };
+    if (decoded.purpose !== 'instagram_oauth_state' || !decoded.nonce) throw new Error('purpose');
+    nonce = decoded.nonce;
+  } catch {
+    return fail(400, 'VALIDACAO_STATE_OAUTH', 'INVALID_STATE', 'Sessão de conexão expirada ou inválida. Inicie novamente pelo painel.', 'state inválido ou expirado.');
+  }
 
-    // Ticket opaco assinado pelo servidor (10 min) para sincronização cross-domain sem expor encryptedAccessToken no objeto tenant/user
-    // O token criptografado fica somente no servidor; o navegador recebe apenas um ticket opaco de uso único.
-    const syncTicket = issueSyncTicket({
-      tenantId: targetTenant!.id,
-      // Preserva o tipo do token (UNIFIED_BISU): ele define o host da Graph API na publicação.
-      tokenType: longLivedExchange.tokenType,
-      username: targetTenant!.username,
-      nome: targetTenant!.nome,
-      instagramUserId: targetTenant!.instagramUserId,
-      accountType: targetTenant!.account_type,
-      avatarUrl: targetTenant!.avatarUrl,
-      encryptedAccessToken,
-      tokenIssuedAt: targetTenant!.tokenIssuedAt,
-      tokenExpiresAt: targetTenant!.tokenExpiresAt,
-      grantedScopes: targetTenant!.grantedScopes,
-      driveFolderName: targetTenant!.driveFolderName || null,
-      driveFolderId: targetTenant!.driveFolderId || null,
+  let linkState: (OAuthLinkState & { redirectUri: string; browserBinding: string }) | null = null;
+  try {
+    const rec = await consumeOAuthState(nonce);
+    if (rec) {
+      linkState = {
+        userId: rec.userId,
+        role: rec.role,
+        tenantId: rec.tenantId,
+        driveFolderName: rec.driveFolderName,
+        redirectUri: rec.redirectUri,
+        browserBinding: rec.browserBinding,
+      };
+    }
+  } catch (err: any) {
+    console.error('[OAuth] Falha ao consumir state:', err?.message || err);
+    return fail(503, 'VALIDACAO_STATE_OAUTH', 'TEMPORARY_TECHNICAL_ERROR', IG_USER_MSG_TEMPORARY_ERROR, 'Banco indisponível para validar o state.');
+  }
+  if (!linkState) {
+    return fail(400, 'VALIDACAO_STATE_OAUTH', 'INVALID_STATE', 'Esta tentativa de conexão já foi usada ou expirou. Inicie novamente pelo painel.', 'state já utilizado ou expirado.');
+  }
+
+  // O mesmo navegador que iniciou o fluxo precisa concluí-lo.
+  const bindingCookie = readRequestCookie(req, IG_OAUTH_BINDING_COOKIE);
+  res.clearCookie(IG_OAUTH_BINDING_COOKIE, { path: '/api/auth/instagram' });
+  if (!bindingCookie || sha256Hex(bindingCookie) !== linkState.browserBinding) {
+    return fail(400, 'VALIDACAO_STATE_OAUTH', 'INVALID_STATE', 'A conexão precisa ser concluída no mesmo navegador em que foi iniciada. Inicie novamente pelo painel.', 'Cookie de vínculo ausente ou divergente.');
+  }
+  if (linkState.redirectUri !== postRedirectUri) {
+    return fail(400, 'VALIDACAO_STATE_OAUTH', 'INVALID_STATE', IG_USER_MSG_TEMPORARY_ERROR, 'Divergência de redirect_uri entre autorização e callback.');
+  }
+
+  // 2. O usuário pode ter cancelado/negado no diálogo da Meta.
+  if (typeof req.query.error === 'string' && req.query.error) {
+    const reasonText = `${String(req.query.error_reason || '')} ${String(req.query.error_description || '')}`.toLowerCase();
+    if (reasonText.includes('developer role') || reasonText.includes('developer_role')) {
+      return fail(400, 'EXTERNAL_ACCOUNT_NOT_AUTHORIZED_IN_STANDARD_ACCESS', 'ACCOUNT_NOT_AUTHORIZED_IN_META_APP', IG_USER_MSG_PERMISSION_RESTRICTED);
+    }
+    return fail(400, 'AUTORIZACAO_NEGADA', 'AUTHORIZATION_DENIED', 'A autorização não foi concluída. Para conectar, aprove as permissões solicitadas.', `Meta retornou erro: ${String(req.query.error).slice(0, 80)}`);
+  }
+  const cleanCode = String(req.query.code || '').replace(/#_$/, '').trim();
+  if (!cleanCode) {
+    return fail(400, 'CODIGO_AUSENTE', 'TEMPORARY_TECHNICAL_ERROR', IG_USER_MSG_TEMPORARY_ERROR, 'Código de autorização ausente.');
+  }
+  try {
+    if (!(await markOAuthCodeUsed(cleanCode))) {
+      return fail(400, 'CODIGO_JA_UTILIZADO', 'INVALID_STATE', 'Este código de autorização já foi utilizado. Inicie novamente pelo painel.');
+    }
+  } catch {
+    return fail(503, 'CODIGO_OAUTH', 'TEMPORARY_TECHNICAL_ERROR', IG_USER_MSG_TEMPORARY_ERROR);
+  }
+
+  try {
+    // 3. Troca do código pelo token (Unified Login: graph.facebook.com/v27.0/oauth/access_token).
+    const exchange = await exchangeUnifiedLoginCode({
+      code: cleanCode,
+      clientId,
+      clientSecret,
+      redirectUri: postRedirectUri,
     });
+    if (!exchange.ok || !exchange.accessToken) {
+      const errText = JSON.stringify(exchange.raw?.error || {}).toLowerCase();
+      const restricted =
+        errText.includes('insufficient developer role') || errText.includes('tester') || errText.includes('permission');
+      recordSanitizedOAuthDiagnostic({
+        timestamp: new Date().toISOString(),
+        step: '1_GET_OAUTH_ACCESS_TOKEN',
+        success: false,
+        httpStatus: exchange.status || 400,
+        metaErrorCode: exchange.raw?.error?.code,
+        metaErrorType: exchange.raw?.error?.type,
+        metaErrorMessage: exchange.raw?.error?.message,
+        endpointConsulted: `${IG_UNIFIED_GRAPH_BASE_URL}/${IG_UNIFIED_GRAPH_API_VERSION}/oauth/access_token`,
+        reasonCode: restricted ? 'ACCOUNT_NOT_AUTHORIZED_IN_META_APP' : 'TEMPORARY_TECHNICAL_ERROR',
+      });
+      return fail(
+        400,
+        '1_GET_OAUTH_ACCESS_TOKEN',
+        restricted ? 'ACCOUNT_NOT_AUTHORIZED_IN_META_APP' : 'TEMPORARY_TECHNICAL_ERROR',
+        restricted ? IG_USER_MSG_PERMISSION_RESTRICTED : IG_USER_MSG_TEMPORARY_ERROR
+      );
+    }
+    const accessToken = exchange.accessToken;
 
-    const isReconnectedByAuthenticatedSession = Boolean(
-      verifiedStateAdminId || verifiedStateRole === 'ADMIN' || verifiedStateRole === 'TENANT'
-    );
+    // 4. O token precisa ser do NOSSO app, estar válido e ter as permissões do Unified Login.
+    const verification = await verifyUnifiedLoginToken({ accessToken, appId: clientId, appSecret: clientSecret });
+    if (!verification.ok || !verification.isValid || !verification.appIdMatches) {
+      recordSanitizedOAuthDiagnostic({
+        timestamp: new Date().toISOString(),
+        step: '1B_TOKEN_NAO_VALIDADO',
+        success: false,
+        httpStatus: 400,
+        reasonCode: 'TOKEN_NOT_VERIFIED',
+        endpointConsulted: `${IG_UNIFIED_GRAPH_BASE_URL}/${IG_UNIFIED_GRAPH_API_VERSION}/debug_token`,
+        metaErrorMessage: verification.errorMessage,
+      });
+      return fail(400, '1B_TOKEN_NAO_VALIDADO', 'TOKEN_NOT_VERIFIED', IG_USER_MSG_TEMPORARY_ERROR, 'Token não pertence ao app ou é inválido.');
+    }
 
-    if (String(req.query.format || '').toLowerCase() === 'json') {
-      return res.status(200).json({
-        ok: true,
-        versao_codigo: 'v3_nova',
-        versao: 'v4_limpa_sem_callback_text',
-        user: userProfile,
-        tenant: safeTenantPayload,
-        token,
-        syncTicket,
+    // 5. Contas profissionais realmente autorizadas pelo usuário no diálogo da Meta.
+    const assigned = await fetchAssignedInstagramAccounts(accessToken);
+    if (!assigned.ok) {
+      recordSanitizedOAuthDiagnostic({
+        timestamp: new Date().toISOString(),
+        step: '2_GET_ASSIGNED_INSTAGRAM_ACCOUNTS',
+        success: false,
+        httpStatus: assigned.status,
+        metaErrorCode: assigned.raw?.error?.code,
+        metaErrorType: assigned.raw?.error?.type,
+        metaErrorMessage: assigned.raw?.error?.message,
+        endpointConsulted: `${igGraphBase('unified')}/me/assigned_instagram_accounts`,
+        reasonCode: 'ACCOUNT_NOT_AUTHORIZED_IN_META_APP',
+        userMessage: IG_USER_MSG_PERMISSION_RESTRICTED,
+      });
+      return fail(400, '2_GET_ASSIGNED_INSTAGRAM_ACCOUNTS', 'ACCOUNT_NOT_AUTHORIZED_IN_META_APP', IG_USER_MSG_PERMISSION_RESTRICTED);
+    }
+    if (assigned.accounts.length === 0) {
+      return fail(400, '2_NENHUMA_CONTA_AUTORIZADA', 'NO_INSTAGRAM_ACCOUNT', 'Nenhuma conta profissional do Instagram foi compartilhada. Inicie novamente e selecione uma conta profissional.');
+    }
+
+    // 6. Permissões REAIS: debug_token; se a Meta não as listar, prova a de publicação sem publicar nada.
+    let grantedScopes: string[] = verification.scopesReported ? verification.scopes : [];
+    if (!verification.scopesReported) {
+      const probe = await probeContentPublishPermission(accessToken, assigned.accounts[0].id);
+      if (probe.ok) grantedScopes = [...REQUIRED_IG_SCOPES];
+    }
+    const scopeValidation = hasRequiredInstagramScopes(grantedScopes.length > 0 ? grantedScopes : undefined);
+    if (grantedScopes.length === 0 || !scopeValidation.valid) {
+      recordSanitizedOAuthDiagnostic({
+        timestamp: new Date().toISOString(),
+        step: '1C_PERMISSOES_INSUFICIENTES',
+        success: false,
+        httpStatus: 400,
+        grantedScopes,
+        reasonCode: 'INSUFFICIENT_SCOPES',
+        userMessage: IG_USER_MSG_PERMISSION_RESTRICTED,
+      });
+      return respondOAuthCallbackError(req, res, 400, {
+        falha_no_passo: '1C_PERMISSOES_INSUFICIENTES',
+        reason_code: 'INSUFFICIENT_SCOPES',
+        user_message: IG_USER_MSG_PERMISSION_RESTRICTED,
+        permissoes_recebidas: grantedScopes,
+        permissoes_faltantes: scopeValidation.missingScopes,
+        erro: IG_USER_MSG_PERMISSION_RESTRICTED,
       });
     }
 
-    return res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Instagram Conectado - ATO.</title>
-      <style>
-        body {
-          background-color: #0A0A0A;
-          color: #FFFFFF;
-          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          min-height: 100vh;
-          margin: 0;
-          padding: 24px;
-          box-sizing: border-box;
-        }
-        .card {
-          background-color: #121212;
-          border: 1px solid #242424;
-          border-radius: 16px;
-          padding: 32px 28px;
-          text-align: center;
-          max-width: 380px;
-          width: 100%;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-        }
-        .logo {
-          font-size: 18px;
-          font-weight: 700;
-          letter-spacing: 0.5px;
-          margin-bottom: 20px;
-          font-family: monospace;
-        }
-        .logo span { color: #10B981; }
-        h2 { margin: 0 0 10px; font-size: 18px; font-weight: 600; color: #FFFFFF; }
-        p { color: #8E8E93; font-size: 13px; line-height: 1.5; margin: 0 0 24px; }
-        .badge {
-          display: inline-block;
-          background: #1A1A1A;
-          border: 1px solid #2E2E2E;
-          color: #FFFFFF;
-          font-family: monospace;
-          font-size: 12px;
-          padding: 5px 12px;
-          border-radius: 8px;
-          margin-bottom: 20px;
-        }
-      </style>
-    </head>
-    <body>
-      <div class="card">
-        <div class="logo">ATO<span>.</span></div>
-        <h2>Conta Conectada</h2>
-        <div class="badge">@${escapeHtml(targetTenant!.username)}</div>
-        <p>Autenticação oficial concluída e token longo salvo no PostgreSQL. Redirecionando para o painel...</p>
-      </div>
-      <script>
-        const isReconnectedByAdmin = ${safeJsonForHtml(isReconnectedByAuthenticatedSession)};
-        const appOrigin = ${safeJsonForHtml(getAppOrigin(req))};
-        // O token de sessão NÃO é enviado ao opener: o popup grava no localStorage do mesmo domínio.
-        const authPayload = {
-          type: 'INSTAGRAM_AUTH_SUCCESS',
-          reconnectedByAdmin: isReconnectedByAdmin,
-          user: ${safeJsonForHtml(userProfile)},
-          tenant: ${safeJsonForHtml(safeTenantPayload)},
-          syncTicket: ${safeJsonForHtml(syncTicket)}
-        };
-        if (!isReconnectedByAdmin) {
-          try {
-            localStorage.clear();
-            sessionStorage.clear();
-            localStorage.setItem('ato_social_jwt_token', ${safeJsonForHtml(token)});
-            localStorage.setItem('ato_social_user_data', JSON.stringify(authPayload.user));
-          } catch (err) {}
-        }
-        // Sem token na URL: o histórico e os logs do servidor não registram a sessão.
-        const destino = isReconnectedByAdmin
-          ? '/?reconnected=' + encodeURIComponent(${safeJsonForHtml(targetTenant!.username)})
-          : '/';
-        if (window.opener && !window.opener.closed) {
-          try {
-            window.opener.postMessage(authPayload, appOrigin);
-            setTimeout(() => window.close(), 500);
-          } catch (e) {
-            window.location.href = destino;
-          }
-        } else {
-          window.location.href = destino;
-        }
-      </script>
-    </body>
-    </html>
-  `);
-  } catch (fetchErr: any) {
-    console.error('ERRO NA TROCA DE TOKEN DO INSTAGRAM:', fetchErr);
-    return respondOAuthCallbackError(req, res, 400, {
-      versao_codigo: 'v3_nova',
-      versao: 'v4_limpa_sem_callback_text',
-      falha_no_passo: 'EXCECAO_CALLBACK',
-      reason_code: 'TEMPORARY_TECHNICAL_ERROR',
-      user_message: IG_USER_MSG_TEMPORARY_ERROR,
-      resposta_instagram: {
-        error_message: fetchErr?.message || String(fetchErr),
-      },
+    const nowIso = new Date().toISOString();
+    const expiresAt =
+      verification.expiresAt || new Date(Date.now() + exchange.expiresInSeconds * 1000).toISOString();
+    const encryptedAccessToken = TokenService.encrypt(accessToken);
+
+    // 7. Uma conta: vincula. Várias: o usuário escolhe entre as autorizadas (nunca a primeira por padrão).
+    if (assigned.accounts.length === 1) {
+      const linked = await linkInstagramAccountToCompany({
+        state: linkState,
+        account: assigned.accounts[0],
+        encryptedAccessToken,
+        tokenType: UNIFIED_TOKEN_TYPE,
+        tokenIssuedAt: nowIso,
+        tokenExpiresAt: expiresAt,
+        grantedScopes,
+      });
+      if (!linked.ok) {
+        return fail(linked.status, linked.step, linked.reasonCode, linked.userMessage);
+      }
+      const safe = sanitizeTenantForClient(linked.tenant, getTokenEncryptionKey() || JWT_SECRET);
+      if (String(req.query.format || '').toLowerCase() === 'json') {
+        return res.status(200).json({ ok: true, tenant: safe });
+      }
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.send(renderInstagramConnectedPage(req, safe, linkState.role === 'ADMIN'));
+    }
+
+    const pendingId = nodeCrypto.randomUUID();
+    const pendingSecret = newOpaqueSecret();
+    await createPendingConnection({
+      id: pendingId,
+      secret: pendingSecret,
+      userId: linkState.userId,
+      role: linkState.role,
+      tenantId: linkState.tenantId,
+      driveFolderName: linkState.driveFolderName,
+      encryptedAccessToken,
+      tokenType: UNIFIED_TOKEN_TYPE,
+      tokenIssuedAt: nowIso,
+      tokenExpiresAt: expiresAt,
+      grantedScopes,
+      accounts: assigned.accounts.map((a) => ({ id: a.id, username: a.username })),
     });
+
+    const buttons = assigned.accounts
+      .map(
+        (a) =>
+          `<form method="POST" action="/api/auth/instagram/select"><input type="hidden" name="pendingId" value="${escapeHtml(pendingId)}"><input type="hidden" name="secret" value="${escapeHtml(pendingSecret)}"><input type="hidden" name="accountId" value="${escapeHtml(a.id)}"><button class="acc" type="submit">@${escapeHtml(a.username || a.id)}</button></form>`
+      )
+      .join('');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.send(
+      renderInstagramPopupPage(
+        'Escolha a conta - ATO Social Hub',
+        `<h2>Escolha a conta do Instagram</h2><p>Você autorizou mais de uma conta profissional. Selecione a que será conectada ao ATO Social Hub.</p>${buttons}`,
+        ''
+      )
+    );
+  } catch (err: any) {
+    console.error('[OAuth] Erro inesperado no callback:', err?.message || err);
+    return fail(500, 'CALLBACK_ERROR', 'TEMPORARY_TECHNICAL_ERROR', IG_USER_MSG_TEMPORARY_ERROR);
   }
 });
 
-// E. Rota auxiliar de login/reconexão de cliente para testes automatizados e validação de ciclo de vida
-app.post('/api/auth/instagram/simulate', async (req: Request, res: Response) => {
+// D2. Confirmação da conta escolhida (somente entre as contas autorizadas na conexão pendente).
+app.post('/api/auth/instagram/select', async (req: Request, res: Response) => {
+  const { JWT_SECRET } = getEnv();
+  res.setHeader('Cache-Control', 'no-store');
+  const pendingId = String(req.body?.pendingId || '').trim();
+  const secret = String(req.body?.secret || '').trim();
+  const accountId = String(req.body?.accountId || '').trim();
+  const fail = (status: number, step: string, reasonCode: string, userMessage: string) =>
+    respondOAuthCallbackError(req, res, status, {
+      falha_no_passo: step,
+      reason_code: reasonCode,
+      user_message: userMessage,
+      erro: userMessage,
+    });
+
+  if (!pendingId || !secret || !accountId) {
+    return fail(400, 'SELECAO_CONTA', 'INVALID_STATE', 'Seleção inválida. Inicie novamente pelo painel.');
+  }
+  let consumed: Awaited<ReturnType<typeof consumePendingConnection>> = null;
+  try {
+    consumed = await consumePendingConnection(pendingId, secret, accountId);
+  } catch {
+    return fail(503, 'SELECAO_CONTA', 'TEMPORARY_TECHNICAL_ERROR', IG_USER_MSG_TEMPORARY_ERROR);
+  }
+  if (!consumed) {
+    return fail(400, 'SELECAO_CONTA', 'INVALID_STATE', 'Esta seleção expirou, já foi usada ou a conta não foi autorizada. Inicie novamente pelo painel.');
+  }
+  const { record, account } = consumed;
+  const linked = await linkInstagramAccountToCompany({
+    state: { userId: record.userId, role: record.role, tenantId: record.tenantId, driveFolderName: record.driveFolderName },
+    account,
+    encryptedAccessToken: record.encryptedAccessToken,
+    tokenType: record.tokenType,
+    tokenIssuedAt: record.tokenIssuedAt,
+    tokenExpiresAt: record.tokenExpiresAt,
+    grantedScopes: record.grantedScopes,
+  });
+  if (!linked.ok) {
+    return fail(linked.status, linked.step, linked.reasonCode, linked.userMessage);
+  }
+  const safe = sanitizeTenantForClient(linked.tenant, getTokenEncryptionKey() || JWT_SECRET);
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  return res.send(renderInstagramConnectedPage(req, safe, record.role === 'ADMIN'));
+});
+
+// E. Rota auxiliar de login/reconexão de cliente SOMENTE para testes automatizados.
+// Emite sessão sem validar identidade, portanto NUNCA pode existir em produção.
+function blockInProduction(_req: Request, res: Response, next: () => void) {
+  if (IS_PRODUCTION || String(process.env.NODE_ENV || '').toLowerCase() === 'production') {
+    return res.status(404).json({ error: 'Rota não encontrada.' });
+  }
+  return next();
+}
+app.post('/api/auth/instagram/simulate', blockInProduction, async (req: Request, res: Response) => {
   loadDatabaseFromDisk();
   const { JWT_SECRET } = getEnv();
   const encKey = getTokenEncryptionKey();
@@ -3649,51 +3021,12 @@ app.post('/api/auth/instagram/simulate', async (req: Request, res: Response) => 
   });
 });
 
-// F. Compatibilidade legada com /api/auth/instagram (sem fallback de usuário)
-app.post('/api/auth/instagram', (req: Request, res: Response) => {
-  loadDatabaseFromDisk();
-  const { JWT_SECRET } = getEnv();
-  const { customUsername, customName } = req.body;
-  if (!customUsername || typeof customUsername !== 'string' || !customUsername.trim()) {
-    return res.status(400).json({ error: 'Nome de usuário do Instagram (@) é obrigatório.' });
-  }
-  const cleanUsername = customUsername.replace('@', '').trim().toLowerCase();
-  let targetTenant = tenants.find((t) => t.username.toLowerCase() === cleanUsername);
-
-  if (!targetTenant) {
-    targetTenant = {
-      id: `tenant_${cleanUsername}_${Date.now()}`,
-      username: cleanUsername,
-      nome: customName || cleanUsername,
-      instagramUserId: `ig_${Date.now()}`,
-      driveFolderName: null,
-      driveFolderId: null,
-      status: 'PENDENTE',
-      requestedAt: new Date().toISOString(),
-    };
-    tenants.push(targetTenant);
-    saveDatabaseToDisk();
-  }
-
-  const safeTenant = sanitizeTenantForClient(targetTenant, JWT_SECRET);
-  const user: UserProfile = {
-    id: `usr_${targetTenant.id}`,
-    nome: targetTenant.nome,
-    role: 'TENANT',
-    tenantId: targetTenant.id,
-    instagramUsername: targetTenant.username,
-    status: targetTenant.status,
-    driveFolderName: targetTenant.driveFolderName || null,
-    driveFolderId: targetTenant.driveFolderId || null,
-  };
-
-  const token = jwt.sign(user, JWT_SECRET, { expiresIn: '72h' });
-
-  return res.json({
-    token,
-    user,
-    tenant: safeTenant,
-    message: `Autenticado com sucesso como ${targetTenant.nome} (@${targetTenant.username}).`,
+// F. Rota legada /api/auth/instagram: emitia sessão TENANT apenas pelo @username (sem validar identidade).
+// Desativada de forma definitiva; o acesso agora exige e-mail/senha e a conexão do Instagram exige OAuth.
+app.post('/api/auth/instagram', (_req: Request, res: Response) => {
+  return res.status(410).json({
+    error:
+      'Este acesso foi desativado. Entre com e-mail e senha e conecte o Instagram pelo painel.',
   });
 });
 
@@ -4031,42 +3364,38 @@ app.get('/api/admin/test-records/preview', requireAuth, requireAdmin, async (_re
   }
 });
 
-app.post('/api/admin/test-records/reset', requireAuth, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
-  const { confirm, scope = 'ALL_CANDIDATES', selectedIds = [], action = 'ARCHIVE_TESTS' } = req.body || {};
-  if (confirm !== true) {
-    return res.status(400).json({
-      success: false,
-      error: 'Confirmação obrigatória ausente. Envie "confirm: true" no corpo da requisição para autorizar a limpeza.',
-    });
-  }
+// Ação destrutiva: nada é presumido. Exige confirmação, ação nomeada, escopo e IDs explícitos.
+const TEST_RESET_ACTION = 'RESET_SELECTED_TO_PENDING';
 
-  const validActions = [
-    'ARCHIVE_TESTS',
-    'RESET_ATTEMPTS',
-    'CANCEL_SCHEDULES',
-    'RESET_PUBLISHED_TO_PENDING',
-    'RESET_ALL_POSTS_TO_UNPUBLISHED',
-  ];
-  if (!validActions.includes(action)) {
-    return res.status(400).json({
-      success: false,
-      error: `Ação inválida. Escolha entre: ${validActions.join(', ')}.`,
-    });
+app.post('/api/admin/test-records/reset', requireAuth, requireAdmin, async (req: AuthenticatedRequest, res: Response) => {
+  const { confirm, scope, selectedIds, action, allowPublished } = req.body || {};
+  const fail = (error: string) => res.status(400).json({ success: false, error });
+
+  if (confirm !== true) {
+    return fail('Confirmação obrigatória ausente. Envie "confirm: true" no corpo da requisição para autorizar a operação.');
+  }
+  if (action !== TEST_RESET_ACTION) {
+    return fail(`Ação explícita obrigatória. Envie "action": "${TEST_RESET_ACTION}".`);
+  }
+  if (scope !== 'SELECTED_IDS') {
+    return fail('Escopo explícito obrigatório. Envie "scope": "SELECTED_IDS" com a lista de postagens.');
+  }
+  if (!Array.isArray(selectedIds) || selectedIds.filter((id) => typeof id === 'string' && id.trim()).length === 0) {
+    return fail('Selecione ao menos uma postagem: "selectedIds" deve ser uma lista não vazia de IDs.');
   }
 
   try {
     const result = await resetTestRecordsInDb({
-      scope,
-      selectedIds,
-      action,
+      selectedIds: selectedIds.filter((id: unknown): id is string => typeof id === 'string'),
+      allowPublished: allowPublished === true,
       adminUser: req.user?.email || req.user?.nome || 'Admin',
     });
 
     await syncStateFromPostgres(true);
 
     return res.json({
-      success: true,
       ...result,
+      success: result.success !== false,
       safetyGuarantees: {
         accountsUntouched: true,
         tokensPreserved: true,
@@ -4492,7 +3821,6 @@ app.post('/api/posts/sync-drive', requireAuth, async (_req: AuthenticatedRequest
 // Upload manual de nova mídia pelo cliente (Dispara UPLOAD_MIDIA com base64 sem prefixo para GOOGLE_APPS_SCRIPT_URL)
 app.post('/api/posts/upload', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   getEnv();
-  console.log("DEBUG ENV - URL:", process.env.GOOGLE_APPS_SCRIPT_URL);
 
   const scriptUrl = process.env.GOOGLE_APPS_SCRIPT_URL || '';
   const secretToken = process.env.WEBHOOK_SECRET_TOKEN || '';
@@ -4504,7 +3832,13 @@ app.post('/api/posts/upload', requireAuth, async (req: AuthenticatedRequest, res
     return res.status(400).json({ error: 'Nome do arquivo é obrigatório.' });
   }
 
-  const rawFolder = (folderName || req.user?.driveFolderName || '').trim();
+  // Isolamento multiempresa: usuário TENANT só envia mídia para a PRÓPRIA empresa (ignora folderName/pastaClienteId do corpo).
+  const isTenantUser = req.user?.role === 'TENANT';
+  const ownTenantForUpload = isTenantUser ? tenants.find((t) => t.id === req.user?.tenantId) : undefined;
+  if (isTenantUser && !ownTenantForUpload) {
+    return res.status(403).json({ error: 'Sua empresa não foi encontrada. Entre em contato com o suporte.' });
+  }
+  const rawFolder = (isTenantUser ? ownTenantForUpload?.driveFolderName || '' : folderName || req.user?.driveFolderName || '').trim();
   const firstKnownFolder = Array.from(driveFoldersMap.values()).find(
     (f) => f.nome && f.nome.toLowerCase() !== 'ato social midia'
   );
@@ -4513,14 +3847,16 @@ app.post('/api/posts/upload', requireAuth, async (req: AuthenticatedRequest, res
       ? rawFolder
       : firstKnownFolder?.nome || 'Ato';
 
-  const targetTenant = tenants.find(
-    (t) =>
-      (req.user?.tenantId && t.id === req.user.tenantId) ||
-      (t.driveFolderName && t.driveFolderName.toLowerCase() === targetFolderName.toLowerCase())
-  );
+  const targetTenant =
+    ownTenantForUpload ||
+    tenants.find(
+      (t) =>
+        (req.user?.tenantId && t.id === req.user.tenantId) ||
+        (t.driveFolderName && t.driveFolderName.toLowerCase() === targetFolderName.toLowerCase())
+    );
   const knownFolder = driveFoldersMap.get(targetFolderName.toLowerCase());
   const pastaClienteId =
-    bodyFolderId ||
+    (isTenantUser ? undefined : bodyFolderId) ||
     targetTenant?.driveFolderId ||
     req.user?.driveFolderId ||
     knownFolder?.id ||
@@ -4559,7 +3895,6 @@ app.post('/api/posts/upload', requireAuth, async (req: AuthenticatedRequest, res
       });
 
       const rawResponse = await gasResp.text();
-      console.log("RESPOSTA CRUA DO SCRIPT:", rawResponse);
 
       try {
         const gasJson = JSON.parse(rawResponse);
@@ -4742,7 +4077,6 @@ const asyncRoute =
 
 app.post('/api/posts/:id/reject', requireAuth, asyncRoute(async (req: AuthenticatedRequest, res: Response) => {
   getEnv();
-  console.log("DEBUG ENV - URL:", process.env.GOOGLE_APPS_SCRIPT_URL);
 
   const scriptUrl = process.env.GOOGLE_APPS_SCRIPT_URL || '';
   const secretToken = process.env.WEBHOOK_SECRET_TOKEN || '';
@@ -6006,6 +5340,14 @@ async function executePostPublishNow(params: {
     pollIntervalMs: params.pollIntervalMs,
     nowMs: params.nowMs,
     persistToPostgres: !testStateOverrideActive,
+    // Em produção a reconexão é gravada no PostgreSQL pelo próprio PublicationService.
+    // No modo de estado em memória (testes), marca a conta em memória e pausa os agendamentos.
+    onMarkAccountReconnect: testStateOverrideActive
+      ? (t, msg) => {
+          const memTenant = tenants.find((x) => x.id === t.id);
+          if (memTenant) markTenantReconnectionNeeded(memTenant, msg);
+        }
+      : undefined,
   });
 
   // Espelha o resultado atualizado na memória local para consistência

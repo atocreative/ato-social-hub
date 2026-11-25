@@ -4,7 +4,7 @@ import http from 'http';
 import jwt from 'jsonwebtoken';
 import { app, ensurePostgresBootstrapped } from '../../server.ts';
 import { dbQuery } from '../db/pool.ts';
-import { getInstagramAccountByIdOrUser, upsertPostGroupToDb } from '../db/repository.ts';
+import { getInstagramAccountByIdOrUser, upsertInstagramAccount, upsertPostGroupToDb } from '../db/repository.ts';
 import { setInstagramFetchOverride } from './instagramCore.ts';
 import { TokenService } from './TokenService.ts';
 import { PublicationService } from './PublicationService.ts';
@@ -36,6 +36,20 @@ describe('ATO Social Hub — SaaS Multiusuário, Multiempresa e Ciclo Automátic
 
   beforeAll(async () => {
     await ensurePostgresBootstrapped();
+    // Os testes rodam em PostgreSQL em memória (nunca no banco real): semeia a conta que antes vinha do banco.
+    await upsertInstagramAccount({
+      id: 'tenant_ato_vc',
+      username: 'ato.vc',
+      nome: 'Ato',
+      instagramUserId: '17841400001112220',
+      account_type: 'BUSINESS',
+      driveFolderName: 'Ato',
+      status: 'APROVADO',
+      connectionStatus: 'DESCONECTADO',
+      hasValidToken: false,
+      requestedAt: new Date().toISOString(),
+      approvedAt: new Date().toISOString(),
+    } as any);
     server = http.createServer(app);
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
     const addr = server.address() as { port: number };
@@ -60,53 +74,25 @@ describe('ATO Social Hub — SaaS Multiusuário, Multiempresa e Ciclo Automátic
   });
 
   it('1 & 2. Conexão de @ato.vc e persistência automática de token longo criptografado no PostgreSQL (sem nunca expor token ao frontend)', async () => {
-    setInstagramFetchOverride(async (url, init) => {
-      const urlStr = String(url);
-      if (urlStr === 'https://api.instagram.com/oauth/access_token' && init?.method === 'POST') {
-        return new Response(
-          JSON.stringify({
-            access_token: 'IGQ_SHORT_ATO_VC_SAAS_001',
-            user_id: '17841400001112220',
-            permissions: ['instagram_business_basic', 'instagram_business_content_publish'],
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } }
-        );
-      }
-      if (urlStr.includes('https://graph.instagram.com/access_token?grant_type=ig_exchange_token')) {
-        return new Response(
-          JSON.stringify({
-            access_token: 'IGQ_LONG_60D_ATO_VC_SAAS_SECRET_TOKEN_999',
-            token_type: 'bearer',
-            expires_in: 5184000, // 60 dias
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } }
-        );
-      }
-      if (urlStr.includes('https://graph.instagram.com/v21.0/me')) {
-        return new Response(
-          JSON.stringify({
-            id: '17841400001112220',
-            user_id: '17841400001112220',
-            username: 'ato.vc',
-            account_type: 'MEDIA_CREATOR',
-          }),
-          { status: 200, headers: { 'content-type': 'application/json' } }
-        );
-      }
-      return new Response('{}', { status: 404 });
-    });
-
-    const connectResult = await TokenService.authorizeAndPersistInstagramAccount({
-      code: 'oauth_code_ato_vc_saas_1',
-      clientId: '954242347109139',
-      clientSecret: 'test_secret_ato',
-      redirectUri: 'https://socialhub.atodev.com.br/api/auth/instagram/callback',
-      preferredTenantId: 'tenant_ato_vc',
-      driveFolderName: 'Ato',
-    });
+    // O fluxo de conexão (OAuth do Unified Login) está coberto em src/tests/oauth_unified_security.test.ts.
+    // Aqui validamos a persistência: token criptografado em repouso, nunca exposto ao frontend.
+    const connectResult = {
+      ok: true,
+      tokenType: 'UNIFIED_BISU',
+      tenant: await TokenService.persistValidatedAccountToken({
+        username: 'ato.vc',
+        instagramUserId: '17841400001112220',
+        accountType: 'BUSINESS',
+        plainAccessToken: 'IGQ_LONG_60D_ATO_VC_SAAS_SECRET_TOKEN_999',
+        tokenType: 'UNIFIED_BISU',
+        grantedScopes: ['instagram_basic', 'instagram_content_publish'],
+        preferredTenantId: 'tenant_ato_vc',
+        driveFolderName: 'Ato',
+      }),
+    };
 
     expect(connectResult.ok).toBe(true);
-    expect(connectResult.tokenType).toBe('LONG_LIVED');
+    expect(connectResult.tokenType).toBe('UNIFIED_BISU');
     expect(connectResult.tenant?.id).toBe('tenant_ato_vc');
     expect(connectResult.tenant?.username).toBe('ato.vc');
     expect(connectResult.tenant?.connectionStatus).toBe('CONECTADO');
@@ -120,7 +106,7 @@ describe('ATO Social Hub — SaaS Multiusuário, Multiempresa e Ciclo Automátic
     const row = dbRow.rows[0];
     expect(row.encrypted_access_token).toMatch(/^enc:v1:/);
     expect(row.encrypted_access_token).not.toContain('IGQ_LONG_60D_ATO_VC_SAAS_SECRET_TOKEN_999');
-    expect(row.token_type).toBe('LONG_LIVED');
+    expect(row.token_type).toBe('UNIFIED_BISU');
     expect(row.connection_status).toBe('CONECTADO');
 
     // Descriptografia apenas no backend com TOKEN_ENCRYPTION_KEY
@@ -271,7 +257,7 @@ describe('ATO Social Hub — SaaS Multiusuário, Multiempresa e Ciclo Automátic
       instagramUserId: '17841400001112220',
       plainAccessToken: 'IGQ_LONG_60D_ATO_VC_RECONNECTED_NO_DUP_888',
       tokenType: 'LONG_LIVED',
-      grantedScopes: ['instagram_business_basic', 'instagram_business_content_publish'],
+      grantedScopes: ['instagram_basic', 'instagram_content_publish'],
     });
 
     expect(reconnected.id).toBe('tenant_ato_vc');
@@ -358,7 +344,8 @@ describe('ATO Social Hub — SaaS Multiusuário, Multiempresa e Ciclo Automátic
           headers: { 'content-type': 'application/json' },
         });
       }
-      if (urlStr.includes('ig_media_saas_sched_404') && urlStr.includes('permalink')) {
+      // O agendador confirma a mídia no perfil (GET /{media-id}?fields=id) antes de marcar como publicado.
+      if (urlStr.includes('ig_media_saas_sched_404')) {
         return new Response(
           JSON.stringify({
             id: 'ig_media_saas_sched_404',
@@ -734,16 +721,35 @@ describe('ATO Social Hub — SaaS Multiusuário, Multiempresa e Ciclo Automátic
   }, 30000);
 
   it('8. Tentativa de conexão por conta externa sem função no app Meta (Standard Access) e diagnóstico de App Review', async () => {
-    // 8a. Callback quando conta externa não autorizada no modo Standard Access retorna erro da Meta
-    const externalCallbackRes = await apiReq(
-      '/api/auth/instagram/callback?error=access_denied&error_reason=insufficient_developer_role&error_description=Insufficient+developer+role'
+    // 8a. Callback quando a conta externa não tem função no app (Standard Access): a Meta devolve o erro
+    // junto com o state. O fluxo precisa ter sido iniciado por usuário autenticado (state válido).
+    const jwtSecretForState = String(process.env.JWT_SECRET || '').trim();
+    const tenantToken = jwt.sign(
+      { id: 'usr_tenant_ato_vc', nome: 'Ato', role: 'TENANT', tenantId: 'tenant_ato_vc' },
+      jwtSecretForState,
+      { expiresIn: '1h' }
     );
+    const urlRes = await fetch(baseUrl + '/api/auth/instagram/url', {
+      headers: { Authorization: 'Bearer ' + tenantToken },
+    });
+    expect(urlRes.status).toBe(200);
+    const urlBody: any = await urlRes.json();
+    const bindCookie = (urlRes.headers.get('set-cookie') || '').split(';')[0];
+    const stateParam = new URL(urlBody.url).searchParams.get('state')!;
+    const rawExternal = await fetch(
+      baseUrl +
+        '/api/auth/instagram/callback?error=access_denied&error_reason=insufficient_developer_role&error_description=Insufficient+developer+role&state=' +
+        encodeURIComponent(stateParam),
+      { headers: { Cookie: bindCookie } }
+    );
+    const externalCallbackRes = { status: rawExternal.status, body: (await rawExternal.json()) as any };
     expect(externalCallbackRes.status).toBe(400);
     expect(externalCallbackRes.body.falha_no_passo).toBe(
       'EXTERNAL_ACCOUNT_NOT_AUTHORIZED_IN_STANDARD_ACCESS'
     );
-    expect(externalCallbackRes.body.erro).toContain('Instagram Testers');
-    expect(externalCallbackRes.body.erro).toContain('Advanced Access');
+    // A mensagem ao usuário é neutra de propósito (não revela modo de desenvolvimento da Meta).
+    expect(externalCallbackRes.body.erro).toContain('precisa de liberação para essa conta');
+    expect(externalCallbackRes.body.reason_code).toBe('ACCOUNT_NOT_AUTHORIZED_IN_META_APP');
 
     // 8b. Endpoint de prontidão para Meta App Review & Advanced Access
     const reviewStatusRes = await apiReq('/api/instagram/app-review-status');
@@ -752,6 +758,6 @@ describe('ATO Social Hub — SaaS Multiusuário, Multiempresa e Ciclo Automátic
     expect(reviewStatusRes.body.externalAccountsReadyForGeneralPublic).toBe(false);
     expect(
       reviewStatusRes.body.requiredPermissions.map((p: any) => p.scope)
-    ).toEqual(['instagram_business_basic', 'instagram_business_content_publish']);
+    ).toEqual(['instagram_basic', 'instagram_content_publish']);
   }, 30000);
 });

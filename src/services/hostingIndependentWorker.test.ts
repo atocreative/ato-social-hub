@@ -5,6 +5,7 @@ import { runDatabaseMigrations } from '../db/migrations.ts';
 import {
   getInstagramAccountByIdOrUser,
   getPostGroupByIdFromDb,
+  upsertInstagramAccount,
   upsertPostGroupToDb,
 } from '../db/repository.ts';
 import { setInstagramFetchOverride } from './instagramCore.ts';
@@ -93,6 +94,20 @@ describe('ATO Social Hub — Agendamento Independente de Hospedagem & Tokens no 
   beforeAll(async () => {
     await runDatabaseMigrations();
     await cleanupTestArtifacts();
+    // Banco de teste é PostgreSQL em memória (nunca o real): semeia a conta que antes existia no banco real.
+    await upsertInstagramAccount({
+      id: 'tenant_ato_vc',
+      username: 'ato.vc',
+      nome: 'Ato',
+      instagramUserId: '17841449218493021',
+      account_type: 'BUSINESS',
+      driveFolderName: 'Ato',
+      status: 'APROVADO',
+      connectionStatus: 'DESCONECTADO',
+      hasValidToken: false,
+      requestedAt: new Date().toISOString(),
+      approvedAt: new Date().toISOString(),
+    } as any);
   });
 
   afterEach(() => {

@@ -373,14 +373,15 @@ export const api = {
 
   // Reset administrativo controlado de registros de teste
   resetTestRecords: async (payload: {
-    confirm: boolean;
-    action: 'ARCHIVE_TESTS' | 'RESET_ATTEMPTS' | 'CANCEL_SCHEDULES';
-    scope?: 'ALL_CANDIDATES' | 'SELECTED_IDS';
-    selectedIds?: string[];
+    confirm: true;
+    action: 'RESET_SELECTED_TO_PENDING';
+    scope: 'SELECTED_IDS';
+    selectedIds: string[];
   }): Promise<{
     success: boolean;
     message: string;
     affectedCount: number;
+    skippedPublishedCount?: number;
     backupSnapshotId: string;
     safetyGuarantees: Record<string, boolean>;
   }> => {

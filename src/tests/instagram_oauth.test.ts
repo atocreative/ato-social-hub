@@ -189,7 +189,7 @@ test('Instagram OAuth 2.0 & Admin Approval Workflow', async () => {
   // 8. Verify Meta Webhook GET challenge verification and POST receiver
   const challengeValue = '1158201444';
   const metaGetRes = await fetch(
-    `${BASE_URL}/api/webhooks/meta?hub.mode=subscribe&hub.challenge=${challengeValue}&hub.verify_token=ato_meta_webhook_2026`
+    `${BASE_URL}/api/webhooks/meta?hub.mode=subscribe&hub.challenge=${challengeValue}&hub.verify_token=${process.env.META_VERIFY_TOKEN || ''}`
   );
   assert.equal(metaGetRes.status, 200);
   assert.ok((metaGetRes.headers.get('content-type') || '').includes('text/plain'));

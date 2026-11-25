@@ -217,6 +217,7 @@ export const AdminTenantsView: React.FC<AdminTenantsViewProps> = ({
     try {
       const res = await api.resetTestRecords({
         confirm: true,
+        action: 'RESET_SELECTED_TO_PENDING',
         scope: 'SELECTED_IDS',
         selectedIds: Array.from(selectedResetIds),
       });

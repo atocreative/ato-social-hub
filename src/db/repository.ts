@@ -59,6 +59,8 @@ export function resolveTenantTokenWithFallback(tenant: TenantAccount): string {
   return String(tenant.accessToken || tenant.access_token || '').trim();
 }
 
+import { hashPassword, verifyPassword, unusablePasswordHash } from '../utils/passwordHash.ts';
+
 export function hashPasswordSha256(password: string): string {
   return crypto.createHash('sha256').update(String(password)).digest('hex');
 }
@@ -87,30 +89,58 @@ function parseJsonSafe<T>(val: any, fallback: T): T {
 // 1. MODULE: USERS & ADMIN AUTH
 // ============================================================================
 
-export async function ensureDefaultAdminUser(): Promise<void> {
+/**
+ * Garante a existência do usuário administrador SEM jamais redefinir a senha de um admin existente.
+ *
+ * - ADMIN_BOOTSTRAP_PASSWORD (mín. 12 caracteres) define a senha ao CRIAR o admin.
+ * - Para trocar a senha de um admin existente (rotação), defina também ADMIN_BOOTSTRAP_PASSWORD_RESET=true
+ *   em UM deploy e remova a flag em seguida.
+ * - Em testes automatizados (VITEST/ATO_TEST_MODE) usa uma senha fixa, somente em banco em memória.
+ * - Sem a variável, o admin é criado sem login habilitado (hash inutilizável): nunca existe senha padrão.
+ */
+export async function ensureDefaultAdminUser(options: { allowTestDefaults?: boolean } = {}): Promise<void> {
   const adminId = 'user_admin_ato';
-  const adminEmail = 'admin@atodev.com.br';
-  const passwordHash = hashPasswordSha256('666666');
+  const adminEmail = String(process.env.ADMIN_BOOTSTRAP_EMAIL || 'admin@atodev.com.br').trim().toLowerCase();
+  const isTestEnv = options.allowTestDefaults ?? Boolean(process.env.VITEST || process.env.ATO_TEST_MODE);
+  const envPassword = String(process.env.ADMIN_BOOTSTRAP_PASSWORD || '');
+  const allowReset = String(process.env.ADMIN_BOOTSTRAP_PASSWORD_RESET || '').toLowerCase() === 'true';
 
-  await dbQuery(
-    `
-    INSERT INTO users (id, email, name, password_hash, role, status, permissions, updated_at)
-    VALUES ($1, $2, $3, $4, 'ADMIN', 'APROVADO', $5::jsonb, NOW())
-    ON CONFLICT (id) DO UPDATE SET
-      email = EXCLUDED.email,
-      password_hash = EXCLUDED.password_hash,
-      role = 'ADMIN',
-      status = 'APROVADO',
-      updated_at = NOW()
-    `,
-    [
-      adminId,
-      adminEmail,
-      'Administrador ATO',
-      passwordHash,
-      JSON.stringify(['ALL', 'MANAGE_TENANTS', 'APPROVE_POSTS', 'PUBLISH_INSTAGRAM', 'GENERATE_AI']),
-    ]
-  );
+  let newPasswordHash: string | null = null;
+  if (envPassword.length >= 12) {
+    newPasswordHash = hashPassword(envPassword);
+  } else if (isTestEnv) {
+    newPasswordHash = hashPassword('666666');
+  }
+
+  const permissions = JSON.stringify(['ALL', 'MANAGE_TENANTS', 'APPROVE_POSTS', 'PUBLISH_INSTAGRAM', 'GENERATE_AI']);
+  const existing = await dbQuery<{ id: string }>('SELECT id FROM users WHERE id = $1 LIMIT 1', [adminId]);
+
+  if (existing.rows.length === 0) {
+    await dbQuery(
+      `
+      INSERT INTO users (id, email, name, password_hash, role, status, permissions, updated_at)
+      VALUES ($1, $2, $3, $4, 'ADMIN', 'APROVADO', $5::jsonb, NOW())
+      ON CONFLICT (id) DO NOTHING
+      `,
+      [adminId, adminEmail, 'Administrador ATO', newPasswordHash || unusablePasswordHash(), permissions]
+    );
+    if (!newPasswordHash) {
+      console.warn(
+        '[Segurança] Admin criado sem senha habilitada. Defina ADMIN_BOOTSTRAP_PASSWORD (mín. 12 caracteres) para habilitar o login.'
+      );
+    }
+    return;
+  }
+
+  // Admin já existe: mantém papel/status; a senha só muda por rotação explícita.
+  if (newPasswordHash && (allowReset || isTestEnv)) {
+    await dbQuery(
+      `UPDATE users SET email = $2, password_hash = $3, role = 'ADMIN', status = 'APROVADO', updated_at = NOW() WHERE id = $1`,
+      [adminId, adminEmail, newPasswordHash]
+    );
+  } else {
+    await dbQuery(`UPDATE users SET role = 'ADMIN', status = 'APROVADO', updated_at = NOW() WHERE id = $1`, [adminId]);
+  }
 }
 
 export async function authenticateAdminUser(
@@ -118,7 +148,6 @@ export async function authenticateAdminUser(
   password: string
 ): Promise<UserProfile | null> {
   const cleanEmail = String(email || '').trim().toLowerCase();
-  const hash = hashPasswordSha256(password);
 
   const res = await dbQuery<{
     id: string;
@@ -133,7 +162,11 @@ export async function authenticateAdminUser(
 
   if (res.rows.length > 0) {
     const row = res.rows[0];
-    if (row.password_hash === hash && row.role === 'ADMIN') {
+    const check = verifyPassword(password, row.password_hash);
+    if (check.ok && row.role === 'ADMIN') {
+      if (check.needsRehash) {
+        await dbQuery('UPDATE users SET password_hash = $2 WHERE id = $1', [row.id, hashPassword(password)]);
+      }
       await dbQuery('UPDATE users SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1', [row.id]);
       return {
         id: row.id,
@@ -153,7 +186,6 @@ export async function authenticateSocialHubUser(
   password: string
 ): Promise<{ user: UserProfile; tenant?: TenantAccount } | null> {
   const cleanEmail = String(email || '').trim().toLowerCase();
-  const hash = hashPasswordSha256(password);
 
   const res = await dbQuery<{
     id: string;
@@ -171,8 +203,12 @@ export async function authenticateSocialHubUser(
 
   if (res.rows.length === 0) return null;
   const row = res.rows[0];
-  if (!row.password_hash || row.password_hash !== hash) {
+  const passwordCheck = verifyPassword(password, row.password_hash);
+  if (!passwordCheck.ok) {
     return null;
+  }
+  if (passwordCheck.needsRehash) {
+    await dbQuery('UPDATE users SET password_hash = $2 WHERE id = $1', [row.id, hashPassword(password)]);
   }
 
   await dbQuery('UPDATE users SET last_login_at = NOW(), updated_at = NOW() WHERE id = $1', [row.id]);
@@ -231,7 +267,7 @@ export async function registerSocialHubUser(input: {
   const cleanEmail = String(input.email || '').trim().toLowerCase();
   const cleanName = String(input.name || '').trim();
   const cleanCompany = String(input.companyName || '').trim();
-  const passwordHash = hashPasswordSha256(input.password);
+  const passwordHash = hashPassword(input.password);
 
   return await withTransaction(async (tx) => {
     const existingEmail = await tx.query<{ id: string }>(
@@ -2327,36 +2363,46 @@ export async function getTestRecordsPreviewFromDb(): Promise<{
 }
 
 export async function resetTestRecordsInDb(params: {
-  scope: 'ALL_CANDIDATES' | 'SELECTED_IDS';
-  selectedIds?: string[];
-  action?: string;
+  selectedIds: string[];
   adminUser: string;
+  /** Só com autorização explícita: inclui posts que já têm instagram_media_id (publicados de verdade). */
+  allowPublished?: boolean;
 }): Promise<{
   success: boolean;
   message: string;
   affectedCount: number;
+  skippedPublishedCount: number;
   backupSnapshotId: string;
 }> {
-  const { scope, selectedIds = [], adminUser } = params;
+  const { adminUser, allowPublished = false } = params;
 
-  let targetPostIds: string[] = [];
-  if (selectedIds.length > 0) {
-    targetPostIds = selectedIds.filter(Boolean);
-  } else {
-    const preview = await getTestRecordsPreviewFromDb();
-    targetPostIds = preview.candidates.map((c) => c.id);
+  // Nunca amplia o alcance sozinho: sem IDs explícitos nada é alterado (antes, lista vazia = todos os posts).
+  let targetPostIds = Array.from(new Set((params.selectedIds || []).map((id) => String(id || '').trim()).filter(Boolean)));
+  if (targetPostIds.length === 0) {
+    throw new Error('Nenhuma postagem selecionada. O reset exige IDs explícitos.');
   }
 
-  if (targetPostIds.length === 0) {
-    const allPostsRes = await dbQuery<{ id: string }>(`SELECT id FROM posts`);
-    targetPostIds = allPostsRes.rows.map((r) => r.id);
+  // Posts com instagram_media_id foram publicados de verdade: resetar apagaria o vínculo com o post real.
+  let skippedPublishedCount = 0;
+  if (!allowPublished) {
+    const published = await dbQuery<{ id: string }>(
+      `SELECT id FROM posts WHERE id = ANY($1::varchar[]) AND instagram_media_id IS NOT NULL AND instagram_media_id <> ''`,
+      [targetPostIds]
+    );
+    const blocked = new Set(published.rows.map((r) => r.id));
+    skippedPublishedCount = blocked.size;
+    targetPostIds = targetPostIds.filter((id) => !blocked.has(id));
   }
 
   if (targetPostIds.length === 0) {
     return {
       success: true,
-      message: 'Nenhum registro encontrado no banco de dados para reset.',
+      message:
+        skippedPublishedCount > 0
+          ? `Nada foi alterado: ${skippedPublishedCount} postagem(ns) selecionada(s) já foi(ram) publicada(s) no Instagram e está(ão) protegida(s).`
+          : 'Nenhum registro encontrado para reset.',
       affectedCount: 0,
+      skippedPublishedCount,
       backupSnapshotId: '',
     };
   }
@@ -2415,8 +2461,7 @@ export async function resetTestRecordsInDb(params: {
     [targetPostIds]
   ).catch(() => {});
 
-  // Limpa empresas órfãs que não possuem postagens ou contas conectadas
-  await deleteOrphanCompaniesInDb().catch(() => {});
+  // Não apaga empresas como efeito colateral: um reset de postagens nunca remove cadastros.
 
   const affectedCount = resetRes.rowCount || targetPostIds.length;
 
@@ -2424,6 +2469,7 @@ export async function resetTestRecordsInDb(params: {
     success: true,
     message: `${affectedCount} postagem(ns) foram totalmente resetadas para o estado inicial "Pendente" limpo (agendamentos, envios, cancelamentos e erros limpos). Backup de segurança salvo: ${backupSnapshotId}.`,
     affectedCount,
+    skippedPublishedCount,
     backupSnapshotId,
   };
 }

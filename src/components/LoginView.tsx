@@ -120,42 +120,6 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigate
     }
   };
 
-  // Entrada principal: conta profissional do Instagram
-  const handleInstagramOAuth = async () => {
-    setErrorMessage(null);
-    setOauthLoading(true);
-    localStorage.clear();
-    sessionStorage.clear();
-    authStorage.clearSession();
-
-    try {
-      const { url: url_completa } = await api.getInstagramAuthUrl();
-
-      if (!url_completa) {
-        throw new Error('Não foi possível obter a URL de autenticação da Meta.');
-      }
-
-      const width = 560;
-      const height = 680;
-      const left = window.screen.width / 2 - width / 2;
-      const top = window.screen.height / 2 - height / 2;
-
-      const popup = window.open(
-        url_completa,
-        'InstagramOAuthWindow',
-        `width=${width},height=${height},top=${top},left=${left},status=no,resizable=yes,scrollbars=yes`
-      );
-
-      if (!popup || popup.closed || typeof popup.closed === 'undefined') {
-        window.location.href = url_completa;
-      }
-    } catch (err: any) {
-      setErrorMessage(err.message || 'Não foi possível concluir a conexão. Tente novamente.');
-    } finally {
-      setOauthLoading(false);
-    }
-  };
-
   const legalLink = (path: string, label: string) => (
     <a
       href={path}
@@ -203,9 +167,17 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigate
 
           <div className="bg-[#121212] border border-[#242424] rounded-2xl p-7 shadow-xl">
             <h2 className="text-xl font-semibold">Entrar</h2>
-            <p className="text-sm text-[#8E8E93] mt-1 mb-6">
-              Use sua conta profissional do Instagram.
+            <p className="text-sm text-[#8E8E93] mt-1 mb-4">
+              Entre com o e-mail e a senha do seu cadastro no ATO Social Hub.
             </p>
+            <ol className="mb-6 space-y-1.5 text-xs text-[#8E8E93] leading-relaxed list-decimal pl-4">
+              <li>Entre no ATO Social Hub com seu e-mail e senha.</li>
+              <li>
+                No painel, em <strong className="text-white">Conta</strong>, conecte sua conta
+                profissional do Instagram.
+              </li>
+              <li>Revise cada post e publique somente o que você aprovar.</li>
+            </ol>
 
             {errorMessage && (
               <div className="mb-5 p-3 bg-red-950/30 border border-[#EF4444]/40 rounded-lg text-[#EF4444] text-xs leading-relaxed">
@@ -213,38 +185,8 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigate
               </div>
             )}
 
-            <button
-              type="button"
-              onClick={handleInstagramOAuth}
-              disabled={loading || oauthLoading}
-              className="w-full py-3 px-4 bg-[#10B981] hover:bg-[#0EA271] text-[#0A0A0A] font-semibold text-sm rounded-lg transition-colors cursor-pointer flex items-center justify-center gap-2.5 disabled:opacity-50"
-            >
-              <svg
-                className="w-4 h-4 shrink-0"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <rect x="2" y="2" width="20" height="20" rx="5" ry="5" />
-                <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
-                <line x1="17.5" y1="6.5" x2="17.51" y2="6.5" />
-              </svg>
-              <span>{oauthLoading ? 'Conectando...' : 'Conectar com Instagram'}</span>
-            </button>
-
-            <p className="text-xs text-[#8E8E93] mt-4 leading-relaxed">
-              Ao conectar, você autoriza o ATO Social Hub a ler o perfil básico e publicar
-              conteúdos aprovados na sua conta.
-            </p>
-
-            <details className="mt-6 border-t border-[#242424] pt-4">
-              <summary className="text-xs text-[#8E8E93] cursor-pointer hover:text-white select-none">
-                Acesso administrativo
-              </summary>
-              <form onSubmit={handleSubmitLogin} className="space-y-4 mt-4">
+            <div>
+              <form onSubmit={handleSubmitLogin} className="space-y-4">
                 <div>
                   <label className="block text-xs text-[#8E8E93] mb-1.5" htmlFor="login-email">
                     E-mail
@@ -288,12 +230,16 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigate
                 <button
                   type="submit"
                   disabled={loading || oauthLoading}
-                  className="w-full bg-[#1F1F22] hover:bg-[#2A2A2E] border border-[#2E2E32] text-white font-medium py-2.5 px-4 rounded-lg text-sm transition-colors cursor-pointer disabled:opacity-50"
+                  className="w-full bg-[#10B981] hover:bg-[#0EA271] text-[#0A0A0A] font-semibold py-2.5 px-4 rounded-lg text-sm transition-colors cursor-pointer disabled:opacity-50"
                 >
                   {loading ? 'Entrando...' : 'Entrar'}
                 </button>
               </form>
-            </details>
+              <p className="text-xs text-[#8E8E93] mt-4 leading-relaxed">
+                A conexão com o Instagram pede acesso ao perfil básico e à publicação, usado apenas
+                para identificar a conta e publicar conteúdos que você aprovar.
+              </p>
+            </div>
           </div>
 
           <footer className="mt-6 text-center text-xs text-[#8E8E93] flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5">

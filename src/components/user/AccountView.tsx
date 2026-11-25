@@ -9,7 +9,19 @@ interface AccountViewProps {
 }
 
 export const AccountView: React.FC<AccountViewProps> = ({ user, onAccountDeleted }) => {
-  const handle = user.instagramUsername ? `@${user.instagramUsername.replace(/^@/, '')}` : user.nome;
+  const rawUsername = (user.instagramUsername || '').replace(/^@/, '');
+  // Conta sem vínculo: cadastro ainda sem Instagram (nome provisório) ou marcada como desconectada.
+  const isLinked =
+    Boolean(rawUsername) && !rawUsername.toLowerCase().startsWith('cadastro_') && user.connectionStatus !== 'DESCONECTADO';
+  const isHealthy = isLinked && user.connectionStatus === 'CONECTADO';
+  const handle = isLinked ? `@${rawUsername}` : user.nome;
+  const scopeLabels: Record<string, string> = {
+    instagram_basic: 'Ler o perfil básico',
+    instagram_content_publish: 'Publicar conteúdo aprovado',
+  };
+  const shownScopes = (user.grantedScopes || [])
+    .map((sc) => sc.replace('instagram_business_', 'instagram_'))
+    .filter((sc) => scopeLabels[sc]);
   const [confirmInput, setConfirmInput] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +64,7 @@ export const AccountView: React.FC<AccountViewProps> = ({ user, onAccountDeleted
     <div className="space-y-6 max-w-2xl">
       <header>
         <h1 className="text-2xl font-bold">Conta</h1>
-        <p className="text-sm text-[#8E8E93] mt-1">Gerencie a conta do Instagram conectada.</p>
+        <p className="text-sm text-[#8E8E93] mt-1">Conecte e gerencie a conta do Instagram usada nas publicações.</p>
       </header>
 
       {error && (
@@ -62,23 +74,44 @@ export const AccountView: React.FC<AccountViewProps> = ({ user, onAccountDeleted
       )}
 
       <section className="bg-[#121212] border border-[#242424] rounded-2xl p-6 space-y-4">
-        <h2 className="text-base font-semibold">Conta conectada</h2>
+        <h2 className="text-base font-semibold">Conexão com o Instagram</h2>
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-sm font-medium">{handle}</p>
-            <p className="text-xs text-[#8E8E93] mt-1">
-              Status: {user.connectionStatus === 'CONECTADO' ? 'Conectada' : 'Reconexão necessária'}
+            <p className="text-sm font-medium">{isLinked ? handle : 'Nenhuma conta conectada'}</p>
+            <p
+              className={`text-xs mt-1 ${isHealthy ? 'text-[#10B981]' : 'text-[#F59E0B]'}`}
+              data-testid="ig-connection-status"
+            >
+              {!isLinked
+                ? 'Conecte sua conta profissional do Instagram para poder publicar.'
+                : isHealthy
+                ? 'Conta conectada e autorizada'
+                : 'Autorização expirada ou revogada. Reconecte para voltar a publicar.'}
             </p>
           </div>
           <button
             type="button"
             onClick={handleReconnect}
             disabled={reconnecting}
-            className="px-4 py-2 rounded-lg border border-[#2E2E32] text-sm hover:bg-[#161616] cursor-pointer disabled:opacity-50"
+            className="px-4 py-2 rounded-lg bg-[#10B981] hover:bg-[#0EA271] text-[#0A0A0A] text-sm font-semibold cursor-pointer disabled:opacity-50 shrink-0"
           >
-            {reconnecting ? 'Abrindo...' : 'Reconectar'}
+            {reconnecting ? 'Abrindo...' : !isLinked ? 'Conectar Instagram' : isHealthy ? 'Reconectar' : 'Reconectar Instagram'}
           </button>
         </div>
+        {isHealthy && shownScopes.length > 0 && (
+          <div className="text-xs text-[#8E8E93]">
+            <p className="mb-1">Permissões concedidas:</p>
+            <ul className="list-disc pl-4 space-y-0.5">
+              {shownScopes.map((sc) => (
+                <li key={sc}>{scopeLabels[sc]}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <p className="text-xs text-[#8E8E93] leading-relaxed border-t border-[#242424] pt-3">
+          Pedimos acesso ao perfil básico para identificar a conta correta e à publicação para
+          postar somente o conteúdo que você aprovar. Nenhuma publicação é feita sem a sua confirmação.
+        </p>
       </section>
 
       <section className="bg-[#121212] border border-[#EF4444]/30 rounded-2xl p-6 space-y-4">

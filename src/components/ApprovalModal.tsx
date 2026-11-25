@@ -11,12 +11,22 @@ interface ApprovalModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirmPublish: (post: PostGroup, payload: InstagramPublishPayload) => Promise<void>;
-  onPublishInstagramNow?: (post: PostGroup, caption: string, accountId?: string) => Promise<void>;
+  onPublishInstagramNow?: (
+    post: PostGroup,
+    caption: string,
+    accountId?: string
+  ) => Promise<PublishNowResult | void>;
   /** Mantido por compatibilidade. A legenda com IA fica sempre disponível. */
   allowAiCaption?: boolean;
 }
 
 type WhenMode = 'NOW' | 'SCHEDULE';
+
+/** Resultado confirmado pela API do Instagram (nunca preenchido sem retorno válido). */
+export interface PublishNowResult {
+  instagramMediaId: string;
+  permalink?: string;
+}
 
 function formatDateBr(isoDate: string): string {
   const [y, m, d] = isoDate.split('-');
@@ -73,9 +83,13 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
   const [scheduledTime, setScheduledTime] = useState(initialSpParts.time);
 
   const [submittingMode, setSubmittingMode] = useState<WhenMode | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const [publishResult, setPublishResult] = useState<PublishNowResult | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
+    setConfirmed(false);
+    setPublishResult(null);
     setError(null);
     setStatusNotice(null);
     setTheme(cleanBatchTitle);
@@ -205,7 +219,12 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
     setSubmittingMode('NOW');
     try {
       if (onPublishInstagramNow) {
-        await onPublishInstagramNow(post, caption, selectedAccountId || undefined);
+        const result = await onPublishInstagramNow(post, caption, selectedAccountId || undefined);
+        if (result && result.instagramMediaId) {
+          // Mostra o resultado confirmado em vez de fechar: o usuário vê a conta e o link.
+          setPublishResult(result);
+          return;
+        }
       } else {
         await onConfirmPublish(post, { action: 'NOW', caption, accountId: selectedAccountId || undefined });
       }
@@ -218,8 +237,62 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
   };
 
   const isBusy = submittingMode !== null || isGeneratingCaption;
-  const canSubmit = caption.trim().length > 0 && !isBusy;
   const accountLabel = selectedAccount?.username || post.scheduledAccountId || clientName.toLowerCase();
+  // Conta provisória (cadastro_*) ou desconectada NÃO é destino de publicação.
+  const hasDestination = Boolean(
+    selectedAccount &&
+      !selectedAccount.username.toLowerCase().startsWith('cadastro_') &&
+      selectedAccount.connectionStatus !== 'DESCONECTADO'
+  );
+  const canSubmit = caption.trim().length > 0 && !isBusy && hasDestination && confirmed;
+
+  if (publishResult) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm font-sans">
+        <div
+          role="status"
+          className="bg-[#121212] border border-[#10B981]/40 rounded-xl w-full max-w-md p-6 space-y-4 shadow-2xl"
+        >
+          <div className="flex items-center gap-2 text-[#10B981]">
+            <CheckCircle2 className="w-5 h-5" />
+            <h2 className="text-base font-semibold">Publicado no Instagram</h2>
+          </div>
+          <dl className="text-xs space-y-1.5 text-[#8E8E93]">
+            <div className="flex justify-between gap-3">
+              <dt>Conta</dt>
+              <dd className="text-white font-medium">@{accountLabel}</dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt>ID da mídia (retornado pelo Instagram)</dt>
+              <dd className="text-white font-mono break-all">{publishResult.instagramMediaId}</dd>
+            </div>
+          </dl>
+          {publishResult.permalink ? (
+            <a
+              href={publishResult.permalink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="block text-center px-4 py-2.5 bg-[#10B981] hover:bg-[#0EA271] text-[#0A0A0A] font-semibold text-sm rounded-lg"
+            >
+              Ver no Instagram
+            </a>
+          ) : (
+            <p className="text-xs text-[#8E8E93]">
+              O Instagram confirmou a publicação, mas ainda não devolveu o link. Ele aparece no
+              histórico assim que estiver disponível.
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={onClose}
+            className="w-full px-4 py-2 text-xs text-[#8E8E93] hover:text-white border border-[#2A2A2A] rounded-lg cursor-pointer"
+          >
+            Fechar
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -235,7 +308,8 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
           <div>
             <h2 className="text-base font-semibold text-white">Publicar no Instagram</h2>
             <p className="text-xs text-[#8E8E93] mt-0.5">
-              Conta: <span className="text-white font-medium">@{accountLabel}</span>
+              Conta:{' '}
+              <span className="text-white font-medium">{hasDestination ? `@${accountLabel}` : 'nenhuma conectada'}</span>
             </p>
           </div>
           <button
@@ -274,6 +348,31 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
               <span>{statusNotice}</span>
             </div>
           )}
+
+          {/* Conta de destino */}
+          <div
+            className={`p-3 rounded-lg border text-xs flex items-center justify-between gap-3 ${
+              hasDestination ? 'border-[#242424] bg-[#0A0A0A]' : 'border-[#EF4444]/50 bg-red-950/30'
+            }`}
+          >
+            <div>
+              <span className="block text-[#8E8E93]">Será publicado em</span>
+              {hasDestination ? (
+                <span className="text-sm text-white font-semibold">@{selectedAccount!.username}</span>
+              ) : (
+                <span className="text-[#F8B4B4]">Nenhuma conta do Instagram conectada. Vá em Conta e use “Conectar Instagram”.</span>
+              )}
+            </div>
+            {hasDestination && (
+              <span
+                className={`px-2 py-1 rounded-md text-[11px] font-medium ${
+                  needsReconnection ? 'bg-[#F59E0B]/15 text-[#F59E0B]' : 'bg-[#10B981]/15 text-[#10B981]'
+                }`}
+              >
+                {needsReconnection ? 'Reconexão necessária' : 'Conta conectada'}
+              </span>
+            )}
+          </div>
 
           {/* Prévia */}
           <div className="bg-[#0A0A0A] border border-[#242424] rounded-lg p-3 flex items-center justify-center">
@@ -442,6 +541,21 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
               </div>
             )}
           </section>
+
+          {/* Confirmação explícita */}
+          <label className="flex items-start gap-2.5 p-3 bg-[#0A0A0A] border border-[#242424] rounded-lg text-xs text-[#C8C8CC] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(e) => setConfirmed(e.target.checked)}
+              disabled={!hasDestination}
+              className="mt-0.5 accent-[#10B981] cursor-pointer"
+            />
+            <span>
+              Revisei a imagem e a legenda e confirmo a publicação em{' '}
+              <strong className="text-white">@{hasDestination ? selectedAccount!.username : '—'}</strong>.
+            </span>
+          </label>
         </div>
 
         {/* Rodapé: uma ação principal */}

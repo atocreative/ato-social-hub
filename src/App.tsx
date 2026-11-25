@@ -302,11 +302,15 @@ export default function App() {
         caption,
         accountId,
       });
+      // Sucesso só com confirmação explícita da API e identificador da mídia criada.
+      if (res.success !== true || !res.instagramMediaId) {
+        throw new Error(
+          (res as any).error || 'A publicação não foi confirmada pelo Instagram. Nada foi marcado como publicado.'
+        );
+      }
       await loadPosts();
-      showNotification(
-        'success',
-        res.message || `Publicado com sucesso no Instagram! (ID Meta: ${res.instagramMediaId})`
-      );
+      showNotification('success', 'Publicado no Instagram.');
+      return { instagramMediaId: String(res.instagramMediaId), permalink: res.permalink || undefined };
     } catch (err: any) {
       await loadPosts();
       const errorMsg = err.message || 'Falha ao publicar no Instagram via Graph API.';
@@ -543,6 +547,22 @@ export default function App() {
   if (!isAdmin) {
     return (
       <UserLayout user={user} view={userView} onChangeView={setUserView} onLogout={handleLogout}>
+        {userView !== 'conta' && (!user.instagramUsername || user.instagramUsername.toLowerCase().startsWith('cadastro_') || user.connectionStatus !== 'CONECTADO') && (
+          <div role="alert" className="mb-4 p-3 bg-[#121212] border border-[#F59E0B]/40 rounded-lg flex items-center justify-between gap-3 text-xs text-[#C8C8CC]">
+            <span>
+              {!user.instagramUsername || user.instagramUsername.toLowerCase().startsWith('cadastro_') || user.connectionStatus === 'DESCONECTADO'
+                ? 'Conecte sua conta profissional do Instagram para poder publicar.'
+                : 'A conexão com o Instagram precisa ser renovada para publicar.'}
+            </span>
+            <button
+              type="button"
+              onClick={() => setUserView('conta')}
+              className="px-3 py-1.5 bg-[#10B981] hover:bg-[#0EA271] text-[#0A0A0A] font-semibold rounded-lg shrink-0 cursor-pointer"
+            >
+              Ir para Conta
+            </button>
+          </div>
+        )}
         {userView === 'dashboard' && <UserDashboard posts={posts} />}
         {userView === 'historico' && <HistoryView posts={posts} />}
         {userView === 'posts' && (
@@ -701,7 +721,7 @@ export default function App() {
                   className="px-3.5 py-2 bg-gradient-to-r from-[#833AB4] via-[#FD1D1D] to-[#F77737] hover:opacity-95 text-white font-medium text-xs rounded-lg transition-opacity cursor-pointer flex items-center gap-1.5 shadow-md"
                 >
                   <Instagram className="w-3.5 h-3.5 text-white shrink-0" />
-                  <span>Reconectar Instagram</span>
+                  <span>{activeTenant && activeTenant.connectionStatus === 'CONECTADO' ? 'Reconectar Instagram' : activeTenant && activeTenant.connectionStatus === 'RECONEXAO_NECESSARIA' ? 'Reconectar Instagram' : 'Conectar Instagram'}</span>
                 </button>
                 <button
                   type="button"

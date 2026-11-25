@@ -33,7 +33,7 @@ interface PostsViewProps {
   folderName: string;
   onChanged: () => void;
   onConfirmPublish: (post: PostGroup, payload: InstagramPublishPayload) => Promise<void>;
-  onPublishInstagramNow: (post: PostGroup, caption: string, accountId?: string) => Promise<void>;
+  onPublishInstagramNow: (post: PostGroup, caption: string, accountId?: string) => Promise<{ instagramMediaId: string; permalink?: string } | void>;
   onConfirmReject: (
     post: PostGroup,
     feedback: RejectionFeedbackInput

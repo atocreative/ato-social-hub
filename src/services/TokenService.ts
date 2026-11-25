@@ -528,28 +528,23 @@ export class TokenService {
       ? encryptInstagramToken(resolvedPlain, encKey)
       : params.encryptedAccessToken || '';
 
-    const scopes =
-      Array.isArray(params.grantedScopes) && params.grantedScopes.length > 0
-        ? params.grantedScopes
-        : [...REQUIRED_IG_SCOPES];
+    // Nunca inventa permissões: sem escopos verificados a conexão fica como ESCOPOS_INSUFICIENTES.
+    const scopes = Array.isArray(params.grantedScopes) ? params.grantedScopes : [];
 
-    const scopeCheck = hasRequiredInstagramScopes(scopes);
+    const scopeCheck =
+      scopes.length === 0
+        ? { valid: false, missingScopes: [...REQUIRED_IG_SCOPES] }
+        : hasRequiredInstagramScopes(scopes);
     const issuedIso = params.tokenIssuedAt || nowIso;
     const expiresIso =
       params.tokenExpiresAt ||
       new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
 
     return await withTransaction(async (tx) => {
-      // 1. Verifica se este instagram_user_id ou username já pertence a uma conta existente
+      // 1. Identidade da conta = instagram_user_id (nunca o username, que pode mudar ou ser reaproveitado)
       const byIdentityRes = await tx.query<any>(
-        `
-        SELECT * FROM instagram_accounts
-        WHERE instagram_user_id = $2
-           OR LOWER(username) = LOWER($1)
-        ORDER BY CASE WHEN instagram_user_id = $2 THEN 0 ELSE 1 END
-        LIMIT 1
-        `,
-        [cleanUsername, params.instagramUserId]
+        `SELECT * FROM instagram_accounts WHERE instagram_user_id = $1 LIMIT 1`,
+        [params.instagramUserId]
       );
       let existingRow = byIdentityRes.rows[0] || null;
 
@@ -582,11 +577,7 @@ export class TokenService {
             prefUsername.startsWith('cadastro_') ||
             preferredRow.connection_status === 'DESCONECTADO';
 
-          if (
-            isUnconnectedPlaceholder ||
-            prefIgId === params.instagramUserId ||
-            prefUsername === cleanUsername.toLowerCase()
-          ) {
+          if (isUnconnectedPlaceholder || prefIgId === params.instagramUserId) {
             existingRow = preferredRow;
           } else if (
             params.driveFolderName &&
@@ -598,6 +589,19 @@ export class TokenService {
             );
           }
         }
+      }
+
+      // Conflito de username: o @ já pertence a um registro com OUTRO instagram_user_id (e não é o registro
+      // que estamos atualizando). Nunca sobrescreve nem adota por username; exige resolução administrativa.
+      const byUsernameRes = await tx.query<any>(
+        `SELECT id, instagram_user_id FROM instagram_accounts WHERE LOWER(username) = LOWER($1) LIMIT 1`,
+        [cleanUsername]
+      );
+      const usernameRow = byUsernameRes.rows[0] || null;
+      if (usernameRow && (!existingRow || usernameRow.id !== existingRow.id)) {
+        throw new Error(
+          'USERNAME_CONFLICT: Este @username já está associado a outro registro com identificador Instagram diferente. Solicite ajuda ao administrador.'
+        );
       }
 
       // Se a conta Instagram já existe e já está vinculada a uma empresa A, bloqueia tentativa de vinculá-la à empresa B

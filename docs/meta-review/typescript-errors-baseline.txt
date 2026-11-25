@@ -1,0 +1,113 @@
+npm notice run react-example@0.0.0 npx
+npm notice run tsc --noEmit
+server.ts(526,9): error TS2353: Object literal may only specify known properties, and 'caption' does not exist in type 'DriveImageItem'.
+server.ts(975,11): error TS2353: Object literal may only specify known properties, and 'caption' does not exist in type 'DriveImageItem'.
+server.ts(975,25): error TS2339: Property 'caption' does not exist on type 'DriveImageItem'.
+server.ts(976,29): error TS2339: Property 'scheduledAt' does not exist on type 'DriveImageItem'.
+server.ts(977,35): error TS2339: Property 'scheduledTimezone' does not exist on type 'DriveImageItem'.
+server.ts(978,36): error TS2339: Property 'scheduledAccountId' does not exist on type 'DriveImageItem'.
+server.ts(979,29): error TS2339: Property 'publishedAt' does not exist on type 'DriveImageItem'.
+server.ts(980,34): error TS2339: Property 'instagramMediaId' does not exist on type 'DriveImageItem'.
+server.ts(981,38): error TS2339: Property 'instagramContainerId' does not exist on type 'DriveImageItem'.
+server.ts(982,35): error TS2339: Property 'childContainerIds' does not exist on type 'DriveImageItem'.
+server.ts(983,36): error TS2339: Property 'instagramPermalink' does not exist on type 'DriveImageItem'.
+server.ts(984,28): error TS2339: Property 'approvedAt' does not exist on type 'DriveImageItem'.
+server.ts(985,28): error TS2339: Property 'approvedBy' does not exist on type 'DriveImageItem'.
+server.ts(986,39): error TS2339: Property 'isApprovedForSchedule' does not exist on type 'DriveImageItem'.
+server.ts(987,33): error TS2339: Property 'publishAttempts' does not exist on type 'DriveImageItem'.
+server.ts(988,31): error TS2339: Property 'lastAttemptAt' does not exist on type 'DriveImageItem'.
+server.ts(989,29): error TS2339: Property 'nextRetryAt' does not exist on type 'DriveImageItem'.
+server.ts(990,31): error TS2339: Property 'failureReason' does not exist on type 'DriveImageItem'.
+server.ts(991,29): error TS2339: Property 'publishLock' does not exist on type 'DriveImageItem'.
+server.ts(992,32): error TS2339: Property 'publishHistory' does not exist on type 'DriveImageItem'.
+server.ts(3360,7): error TS2783: 'success' is specified more than once, so this usage will be overwritten.
+server.ts(3879,5): error TS2353: Object literal may only specify known properties, and 'isApprovedForSchedule' does not exist in type 'DriveImageItem'.
+server.ts(5821,59): error TS2739: Type '{ companyId: string; tenantId: string; userId: string; authorName: string; content: string; type: "PERMANENTE" | "PONTUAL"; }' is missing the following properties from type 'Omit<ClientObservation, "createdAt" | "updatedAt">': id, isActive, syncStatus
+src/components/AdminTenantsView.tsx(218,46): error TS2741: Property 'action' is missing in type '{ confirm: true; scope: "SELECTED_IDS"; selectedIds: string[]; }' but required in type '{ confirm: boolean; action: "ARCHIVE_TESTS" | "CANCEL_SCHEDULES" | "RESET_ATTEMPTS"; scope?: "ALL_CANDIDATES" | "SELECTED_IDS" | undefined; selectedIds?: string[] | undefined; }'.
+src/components/ClientObservationsView.tsx(50,53): error TS2551: Property 'author_name' does not exist on type 'ClientObservation'. Did you mean 'authorName'?
+src/components/ClientObservationsView.tsx(116,59): error TS2551: Property 'is_active' does not exist on type 'ClientObservation'. Did you mean 'isActive'?
+src/components/ClientObservationsView.tsx(146,74): error TS2551: Property 'is_active' does not exist on type 'ClientObservation'. Did you mean 'isActive'?
+src/components/ClientObservationsView.tsx(290,60): error TS2551: Property 'is_active' does not exist on type 'ClientObservation'. Did you mean 'isActive'?
+src/components/ClientObservationsView.tsx(291,56): error TS2551: Property 'author_name' does not exist on type 'ClientObservation'. Did you mean 'authorName'?
+src/components/ClientObservationsView.tsx(292,56): error TS2551: Property 'sync_status' does not exist on type 'ClientObservation'. Did you mean 'syncStatus'?
+src/db/repository.ts(2668,5): error TS2561: Object literal may only specify known properties, but 'is_active' does not exist in type 'ClientObservation'. Did you mean to write 'isActive'?
+src/db/repository.ts(2737,5): error TS2561: Object literal may only specify known properties, but 'is_active' does not exist in type 'ClientObservation'. Did you mean to write 'isActive'?
+src/services/api.ts(661,3): error TS1117: An object literal cannot have multiple properties with the same name.
+src/tests/instagram_publishing_scheduling.test.ts(61,5): error TS2353: Object literal may only specify known properties, and 'isApprovedForSchedule' does not exist in type 'DriveImageItem'.
+src/tests/instagram_publishing_scheduling.test.ts(383,5): error TS2353: Object literal may only specify known properties, and 'isApprovedForSchedule' does not exist in type 'Partial<DriveImageItem>'.
+src/tests/instagram_publishing_scheduling.test.ts(413,5): error TS2353: Object literal may only specify known properties, and 'caption' does not exist in type 'Partial<DriveImageItem>'.
+src/tests/instagram_publishing_scheduling.test.ts(469,5): error TS2353: Object literal may only specify known properties, and 'caption' does not exist in type 'Partial<DriveImageItem>'.
+src/tests/instagram_publishing_scheduling.test.ts(498,5): error TS2353: Object literal may only specify known properties, and 'caption' does not exist in type 'Partial<DriveImageItem>'.
+src/tests/instagram_publishing_scheduling.test.ts(583,5): error TS2353: Object literal may only specify known properties, and 'caption' does not exist in type 'Partial<DriveImageItem>'.
+src/utils/postHelpers.ts(103,25): error TS2339: Property 'caption' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(104,29): error TS2339: Property 'scheduledAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(105,35): error TS2339: Property 'scheduledTimezone' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(106,36): error TS2339: Property 'scheduledAccountId' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(107,29): error TS2339: Property 'publishedAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(108,34): error TS2339: Property 'instagramMediaId' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(109,38): error TS2339: Property 'instagramContainerId' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(110,35): error TS2339: Property 'childContainerIds' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(111,36): error TS2339: Property 'instagramPermalink' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(112,28): error TS2339: Property 'approvedAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(113,28): error TS2339: Property 'approvedBy' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(114,39): error TS2339: Property 'isApprovedForSchedule' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(115,33): error TS2339: Property 'publishAttempts' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(116,31): error TS2339: Property 'lastAttemptAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(117,29): error TS2339: Property 'nextRetryAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(118,31): error TS2339: Property 'failureReason' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(119,29): error TS2339: Property 'publishLock' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(120,32): error TS2339: Property 'publishHistory' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(140,16): error TS2339: Property 'caption' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(140,64): error TS2339: Property 'caption' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(141,16): error TS2339: Property 'scheduledAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(141,76): error TS2339: Property 'scheduledAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(142,16): error TS2339: Property 'scheduledTimezone' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(142,94): error TS2339: Property 'scheduledTimezone' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(143,16): error TS2339: Property 'scheduledAccountId' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(143,97): error TS2339: Property 'scheduledAccountId' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(144,16): error TS2339: Property 'publishedAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(144,76): error TS2339: Property 'publishedAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(145,16): error TS2339: Property 'instagramMediaId' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(145,91): error TS2339: Property 'instagramMediaId' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(146,16): error TS2339: Property 'instagramContainerId' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(146,103): error TS2339: Property 'instagramContainerId' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(147,16): error TS2339: Property 'childContainerIds' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(147,94): error TS2339: Property 'childContainerIds' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(148,16): error TS2339: Property 'instagramPermalink' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(148,97): error TS2339: Property 'instagramPermalink' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(149,16): error TS2339: Property 'approvedAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(149,73): error TS2339: Property 'approvedAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(150,16): error TS2339: Property 'approvedBy' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(150,73): error TS2339: Property 'approvedBy' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(151,16): error TS2339: Property 'isApprovedForSchedule' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(152,44): error TS2339: Property 'isApprovedForSchedule' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(154,16): error TS2339: Property 'publishAttempts' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(155,38): error TS2339: Property 'publishAttempts' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(157,16): error TS2339: Property 'lastAttemptAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(157,82): error TS2339: Property 'lastAttemptAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(158,16): error TS2339: Property 'nextRetryAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(158,103): error TS2339: Property 'nextRetryAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(159,16): error TS2339: Property 'failureReason' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(159,109): error TS2339: Property 'failureReason' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(160,16): error TS2339: Property 'publishLock' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(160,103): error TS2339: Property 'publishLock' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(161,16): error TS2339: Property 'publishHistory' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(161,85): error TS2339: Property 'publishHistory' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(180,23): error TS2339: Property 'caption' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(181,27): error TS2339: Property 'scheduledAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(182,33): error TS2339: Property 'scheduledTimezone' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(183,34): error TS2339: Property 'scheduledAccountId' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(184,27): error TS2339: Property 'publishedAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(185,32): error TS2339: Property 'instagramMediaId' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(186,36): error TS2339: Property 'instagramContainerId' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(187,33): error TS2339: Property 'childContainerIds' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(188,34): error TS2339: Property 'instagramPermalink' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(189,26): error TS2339: Property 'approvedAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(190,26): error TS2339: Property 'approvedBy' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(191,37): error TS2339: Property 'isApprovedForSchedule' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(192,31): error TS2339: Property 'publishAttempts' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(193,29): error TS2339: Property 'lastAttemptAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(194,27): error TS2339: Property 'nextRetryAt' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(195,29): error TS2339: Property 'failureReason' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(196,27): error TS2339: Property 'publishLock' does not exist on type 'DriveImageItem'.
+src/utils/postHelpers.ts(197,30): error TS2339: Property 'publishHistory' does not exist on type 'DriveImageItem'.

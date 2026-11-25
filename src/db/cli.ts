@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 import { checkDatabaseConnection } from './pool.ts';
-import { runDatabaseMigrations } from './migrations.ts';
+import { runDatabaseMigrations, rollbackMigration } from './migrations.ts';
 import { getDatabaseTableCounts } from './repository.ts';
 import { runJsonToPostgresMigration } from './migrateFromJson.ts';
 
@@ -36,6 +36,17 @@ async function main() {
     console.log('[ATO Social Hub DB CLI] Resultado das migrations:', res);
     const counts = await getDatabaseTableCounts();
     console.log('[ATO Social Hub DB CLI] Contagem de registros por tabela:', counts);
+    process.exit(0);
+  }
+
+  if (command === 'rollback') {
+    const version = process.argv[3];
+    if (!version) {
+      console.error('Uso: tsx src/db/cli.ts rollback <versão>');
+      process.exit(1);
+    }
+    await rollbackMigration(version);
+    console.log(`[ATO Social Hub DB CLI] Migração ${version} revertida (somente tabelas auxiliares).`);
     process.exit(0);
   }
 

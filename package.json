@@ -12,11 +12,15 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && node scripts/run-node-tests.mjs",
     "db:migrate": "tsx src/db/cli.ts migrate",
     "db:import:dry-run": "tsx src/db/cli.ts import --dry-run",
     "db:import": "tsx src/db/cli.ts import",
-    "db:status": "tsx src/db/cli.ts status"
+    "db:status": "tsx src/db/cli.ts status",
+    "test:node": "node scripts/run-node-tests.mjs",
+    "db:rollback": "tsx src/db/cli.ts rollback",
+    "db:backup": "tsx scripts/db-backup.ts backup",
+    "db:verify-restore": "tsx scripts/db-backup.ts verify-restore"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.12",

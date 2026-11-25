@@ -1,3 +1,4 @@
+import os from 'os';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -26,7 +27,11 @@ const DATA_DIR = path.join(ROOT_DIR, '.data');
 const DB_JSON_PATH = path.join(DATA_DIR, 'database.json');
 const WEBHOOK_JSON_PATH = path.join(DATA_DIR, 'last_webhook_payload.json');
 const MEMORIA_MD_PATH = path.join(ROOT_DIR, '_MEMORIA_REPROVACOES.md');
-const BACKUP_DIR = path.join(DATA_DIR, 'backups');
+// Em testes automatizados o backup vai para o diretório temporário do sistema (nunca polui .data/backups).
+const BACKUP_DIR =
+  process.env.VITEST || process.env.ATO_TEST_MODE
+    ? path.join(os.tmpdir(), 'ato-social-hub-test-backups')
+    : path.join(DATA_DIR, 'backups');
 
 interface ParsedMemoriaRejection {
   timestamp: string;

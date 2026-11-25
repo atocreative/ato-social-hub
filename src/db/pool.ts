@@ -60,6 +60,11 @@ export function getDatabaseUrlFromEnv(): string {
   // `npm run dev` passa --local-db: usa o PGlite local (.data/pgdata) ignorando DATABASE_URL do .env.
   // `npm start` não passa a flag, então continua usando a Railway normalmente.
   if (process.argv.includes('--local-db')) return '';
+  // Testes NUNCA tocam em um banco real: sem opt-in explícito, usam o PGlite em memória,
+  // mesmo que o .env local aponte para um PostgreSQL de desenvolvimento.
+  if ((process.env.VITEST || process.env.ATO_TEST_MODE) && process.env.ATO_TEST_ALLOW_DATABASE_URL !== 'true') {
+    return '';
+  }
   const raw = String(process.env.DATABASE_URL || '')
     .trim()
     .replace(/^['"]+|['"]+$/g, '')

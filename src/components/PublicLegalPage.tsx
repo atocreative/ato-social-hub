@@ -122,9 +122,9 @@ export const PublicLegalPage: React.FC<PublicLegalPageProps> = ({ route, onNavig
               </h2>
               <p>
                 Ao se autenticar voluntariamente através do fluxo oficial OAuth 2.0 do Instagram
-                (&ldquo;Continuar com o Instagram&rdquo;), o ATO Social Hub solicita apenas os escopos estritamente
-                necessários (<code className="font-mono text-xs text-[#10B981]">instagram_business_basic</code> e{' '}
-                <code className="font-mono text-xs text-[#10B981]">instagram_business_content_publish</code>) e
+                (autorização iniciada dentro do painel, após o login no ATO Social Hub), o ATO Social Hub solicita apenas os escopos estritamente
+                necessários (<code className="font-mono text-xs text-[#10B981]">instagram_basic</code> e{' '}
+                <code className="font-mono text-xs text-[#10B981]">instagram_content_publish</code>) e
                 coleta exclusivamente os seguintes dados da sua conta profissional do Instagram:
               </p>
               <ul className="list-disc pl-5 space-y-2 text-[#C7C7CC]">
@@ -190,8 +190,8 @@ export const PublicLegalPage: React.FC<PublicLegalPageProps> = ({ route, onNavig
               </div>
               <p>
                 A transmissão de dados ocorre unicamente entre o servidor seguro do ATO Social Hub e os endpoints
-                oficiais da API do Instagram (<code className="font-mono text-xs">api.instagram.com</code> e{' '}
-                <code className="font-mono text-xs">graph.instagram.com</code>) para executar as ações solicitadas
+                oficiais da API do Instagram e da Meta (<code className="font-mono text-xs">graph.facebook.com</code>
+                {' '}e, para conexões anteriores, <code className="font-mono text-xs">graph.instagram.com</code>) para executar as ações solicitadas
                 pelo titular da conta.
               </p>
             </section>
@@ -313,8 +313,8 @@ export const PublicLegalPage: React.FC<PublicLegalPageProps> = ({ route, onNavig
                 <li>Termos da Plataforma da Meta e Políticas do Desenvolvedor da Meta;</li>
                 <li>
                   Respeito aos limites de taxa (rate limits) e uso exclusivo dos escopos autorizados pelo usuário
-                  durante o fluxo OAuth (<code className="font-mono text-xs text-[#10B981]">instagram_business_basic</code> e{' '}
-                  <code className="font-mono text-xs text-[#10B981]">instagram_business_content_publish</code>).
+                  durante o fluxo OAuth (<code className="font-mono text-xs text-[#10B981]">instagram_basic</code> e{' '}
+                  <code className="font-mono text-xs text-[#10B981]">instagram_content_publish</code>).
                 </li>
               </ul>
             </section>

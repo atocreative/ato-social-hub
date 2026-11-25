@@ -21,7 +21,9 @@ const NAV: { view: UserView; label: string; icon: React.ComponentType<{ classNam
 ];
 
 export const UserLayout: React.FC<UserLayoutProps> = ({ user, view, onChangeView, onLogout, children }) => {
-  const handle = user.instagramUsername ? `@${user.instagramUsername.replace(/^@/, '')}` : user.nome;
+  const igName = (user.instagramUsername || '').replace(/^@/, '');
+  const isPlaceholder = !igName || igName.toLowerCase().startsWith('cadastro_') || user.connectionStatus === 'DESCONECTADO';
+  const handle = isPlaceholder ? 'Conta de avaliação' : `@${igName}`;
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white font-sans md:flex">

@@ -20,7 +20,7 @@ export type IgLoginMode = 'instagram_login' | 'unified';
 export function igGraphBase(mode?: IgLoginMode): string {
   return mode === 'unified'
     ? `${IG_UNIFIED_GRAPH_BASE_URL}/${IG_UNIFIED_GRAPH_API_VERSION}`
-    : IG_GRAPH_BASE_URL;
+    : `${IG_GRAPH_BASE_URL}/${IG_GRAPH_API_VERSION}`;
 }
 
 /** Contas do login unificado são marcadas com tokenType = UNIFIED_BISU; as antigas continuam como LONG_LIVED. */
@@ -93,10 +93,108 @@ export async function fetchAssignedInstagramAccounts(accessToken: string): Promi
     : [];
   return { ok: resp.ok && !raw?.error, status: resp.status, accounts, raw };
 }
-export const REQUIRED_IG_SCOPES = [
-  'instagram_business_basic',
-  'instagram_business_content_publish',
-];
+// Unified Login (Facebook Login for Business + config_id): permissões oficiais da Meta.
+// Documentação: instagram-api-with-unified-login/permissions
+/**
+ * Prova (sem publicar nada) que o token possui instagram_content_publish:
+ * GET /{ig-user-id}/content_publishing_limit só responde com a permissão concedida.
+ */
+export async function probeContentPublishPermission(
+  accessToken: string,
+  igUserId: string
+): Promise<{ ok: boolean; status: number }> {
+  const fetchFn = getInstagramFetch();
+  try {
+    const query = new URLSearchParams({ fields: 'quota_usage', access_token: accessToken });
+    const resp = await fetchFn(
+      `${IG_UNIFIED_GRAPH_BASE_URL}/${IG_UNIFIED_GRAPH_API_VERSION}/${encodeURIComponent(igUserId)}/content_publishing_limit?${query.toString()}`,
+      { method: 'GET' }
+    );
+    const raw: any = await resp.json().catch(() => ({}));
+    return { ok: resp.ok && !raw?.error, status: resp.status };
+  } catch {
+    return { ok: false, status: 0 };
+  }
+}
+
+export const REQUIRED_IG_SCOPES = ['instagram_basic', 'instagram_content_publish'];
+
+// Nomes do fluxo antigo (Instagram Login). A Meta documenta o mapeamento 1:1 entre os nomes;
+// contas já conectadas antes da migração podem ter os nomes antigos gravados em granted_scopes.
+const LEGACY_SCOPE_ALIASES: Record<string, string> = {
+  instagram_business_basic: 'instagram_basic',
+  instagram_business_content_publish: 'instagram_content_publish',
+};
+
+export function normalizeInstagramScope(scope: string): string {
+  const clean = String(scope || '').trim().toLowerCase();
+  return LEGACY_SCOPE_ALIASES[clean] || clean;
+}
+
+/**
+ * Valida o token do login unificado junto à Meta (GET /debug_token) e devolve as permissões REAIS.
+ * Confirma que o token foi emitido para o NOSSO app e que está válido, sem inventar escopos.
+ */
+export async function verifyUnifiedLoginToken(params: {
+  accessToken: string;
+  appId: string;
+  appSecret: string;
+}): Promise<{
+  ok: boolean;
+  appIdMatches: boolean;
+  isValid: boolean;
+  scopes: string[];
+  scopesReported: boolean;
+  expiresAt?: string;
+  errorMessage?: string;
+}> {
+  const fetchFn = getInstagramFetch();
+  const query = new URLSearchParams({
+    input_token: params.accessToken,
+    access_token: `${params.appId}|${params.appSecret}`,
+  });
+  try {
+    const resp = await fetchFn(
+      `${IG_UNIFIED_GRAPH_BASE_URL}/${IG_UNIFIED_GRAPH_API_VERSION}/debug_token?${query.toString()}`,
+      { method: 'GET' }
+    );
+    const raw: any = await resp.json().catch(() => ({}));
+    const data = raw?.data;
+    if (!resp.ok || !data) {
+      return {
+        ok: false,
+        appIdMatches: false,
+        isValid: false,
+        scopes: [],
+        scopesReported: false,
+        errorMessage: raw?.error?.message || 'Resposta inválida do debug_token.',
+      };
+    }
+    const scopes: string[] = Array.isArray(data.scopes) ? data.scopes.map((x: any) => String(x)) : [];
+    const granular: string[] = Array.isArray(data.granular_scopes)
+      ? data.granular_scopes.map((g: any) => String(g?.scope || '')).filter(Boolean)
+      : [];
+    const merged = Array.from(new Set([...scopes, ...granular]));
+    const expiresAtSec = Number(data.expires_at || 0);
+    return {
+      ok: true,
+      appIdMatches: String(data.app_id || '') === String(params.appId),
+      isValid: data.is_valid === true,
+      scopes: merged,
+      scopesReported: merged.length > 0,
+      expiresAt: expiresAtSec > 0 ? new Date(expiresAtSec * 1000).toISOString() : undefined,
+    };
+  } catch (err: any) {
+    return {
+      ok: false,
+      appIdMatches: false,
+      isValid: false,
+      scopes: [],
+      scopesReported: false,
+      errorMessage: err?.message || String(err),
+    };
+  }
+}
 
 const ENCRYPTION_PREFIX = 'enc:v1:';
 const TWENTY_FOUR_HOURS_MS = 24 * 60 * 60 * 1000;
@@ -221,7 +319,7 @@ export function isAccountTokenExpired(tenant: TenantAccount, nowMs: number = Dat
 
 /**
  * Checks whether the tenant has granted both required scopes:
- * instagram_business_basic and instagram_business_content_publish
+ * instagram_basic and instagram_content_publish (aceita os nomes antigos como equivalentes)
  */
 export function hasRequiredInstagramScopes(scopes?: string[]): {
   valid: boolean;
@@ -231,7 +329,7 @@ export function hasRequiredInstagramScopes(scopes?: string[]): {
     // If scopes array wasn't explicitly populated on a legacy record, treat as valid unless explicitly incomplete
     return { valid: true, missingScopes: [] };
   }
-  const normalized = new Set(scopes.map((s) => String(s).trim().toLowerCase()));
+  const normalized = new Set(scopes.map((s) => normalizeInstagramScope(s)));
   const missing = REQUIRED_IG_SCOPES.filter((reqScope) => !normalized.has(reqScope));
   return {
     valid: missing.length === 0,

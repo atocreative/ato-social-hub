@@ -163,3 +163,10 @@ thumb
 sketch
 
 # End of https://www.toptal.com/developers/gitignore/api/node,react
+
+# Backups lógicos do banco (contêm dados de clientes e tokens cifrados)
+backups-db/
+
+# Dados locais e de operação (banco local, backups, cache de mídia, payloads): nunca versionar
+.data/
+comando.txt
