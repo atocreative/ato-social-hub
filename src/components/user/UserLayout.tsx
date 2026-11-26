@@ -24,7 +24,7 @@ export const UserLayout: React.FC<UserLayoutProps> = ({ user, view, onChangeView
   const igName = (user.instagramUsername || '').replace(/^@/, '');
   const isPlaceholder = !igName || igName.toLowerCase().startsWith('cadastro_') || user.connectionStatus === 'DESCONECTADO';
   // Quem criou ou foi convidado para um espaço de trabalho vê o nome dele enquanto não há Instagram conectado.
-  const handle = isPlaceholder ? (user.workspaceRole ? user.nome : 'Conta de avaliação') : `@${igName}`;
+  const handle = isPlaceholder ? (user.workspaceRole || user.accessStatus ? user.nome : 'Conta de avaliação') : `@${igName}`;
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white font-sans md:flex">

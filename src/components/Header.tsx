@@ -8,8 +8,8 @@ interface HeaderProps {
   onOpenWebhookModal: () => void;
   onResetDemo: () => void;
   isSyncing?: boolean;
-  currentView?: 'ADMIN_TENANTS' | 'APPROVAL_DASHBOARD';
-  onNavigateView?: (view: 'ADMIN_TENANTS' | 'APPROVAL_DASHBOARD') => void;
+  currentView?: 'ADMIN_USERS' | 'ADMIN_TENANTS' | 'APPROVAL_DASHBOARD';
+  onNavigateView?: (view: 'ADMIN_USERS' | 'ADMIN_TENANTS' | 'APPROVAL_DASHBOARD') => void;
   previewingTenantUsername?: string;
 }
 
@@ -35,6 +35,17 @@ export const Header: React.FC<HeaderProps> = ({
             <nav className="flex items-center gap-1 bg-[#0A0A0A] border border-[#242424] rounded-lg p-0.5">
               <button
                 type="button"
+                onClick={() => onNavigateView('ADMIN_USERS')}
+                className={`px-3 py-1.5 text-xs font-medium rounded transition-colors cursor-pointer ${
+                  currentView === 'ADMIN_USERS'
+                    ? 'bg-[#121212] text-white shadow-sm'
+                    : 'text-[#8E8E93] hover:text-white'
+                }`}
+              >
+                Usuários e empresas
+              </button>
+              <button
+                type="button"
                 onClick={() => onNavigateView('ADMIN_TENANTS')}
                 className={`px-3 py-1.5 text-xs font-medium rounded transition-colors cursor-pointer ${
                   currentView === 'ADMIN_TENANTS'
@@ -42,7 +53,7 @@ export const Header: React.FC<HeaderProps> = ({
                     : 'text-[#8E8E93] hover:text-white'
                 }`}
               >
-                Contas
+                Contas Instagram
               </button>
               <button
                 type="button"

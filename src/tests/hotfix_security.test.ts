@@ -79,6 +79,8 @@ beforeAll(async () => {
     type: 'PONTUAL', isActive: true, syncStatus: 'SYNCED',
   } as any);
   await dbQuery(`INSERT INTO users (id,email,name,password_hash,role,status) VALUES ('usr_sem_empresa','sem@exemplo.test','Sem Empresa','x','TENANT','APROVADO')`);
+  // Usuário real do cliente A (o portão de acesso lê o vínculo no banco; token de usuário inexistente é recusado).
+  await dbQuery(`INSERT INTO users (id,email,name,password_hash,role,status,instagram_account_id) VALUES ('usr_cliente_a','a@exemplo.test','Cliente A','x','TENANT','APROVADO','tenant_cliente_a')`);
   await srv.syncStateFromPostgres(true);
 
   server = http.createServer(app);

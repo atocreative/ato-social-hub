@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { dbQuery, withTransaction, DbClientLike } from './pool.ts';
+import { loadFreshAccess } from '../services/membership.ts';
 import { ALL_MANAGED_TABLES } from './migrations.ts';
 import {
   AdminAlertNotification,
@@ -227,13 +228,17 @@ export async function authenticateSocialHubUser(
     };
   }
 
-  let tenant: TenantAccount | null = null;
-  if (row.instagram_account_id) {
-    tenant = await getInstagramAccountByIdOrUser(row.instagram_account_id);
+  // Estado de aprovação vigente (banco). Suspenso não entra; pendente/rejeitado entram SEM dados de empresa.
+  const access = await loadFreshAccess(row.id);
+  const accessStatus = access?.accessStatus || 'PENDING_APPROVAL';
+  if (accessStatus === 'SUSPENDED') {
+    const e: any = new Error('Conta suspensa.');
+    e.code = 'ACCOUNT_SUSPENDED';
+    throw e;
   }
-  if (!tenant) {
-    const fallbackTenantId = row.id.replace(/^usr_/, '');
-    tenant = await getInstagramAccountByIdOrUser(fallbackTenantId);
+  let tenant: TenantAccount | null = null;
+  if (accessStatus === 'ACTIVE' && access?.tenant?.id) {
+    tenant = await getInstagramAccountByIdOrUser(access.tenant.id);
   }
 
   const userProfile: UserProfile = {
@@ -242,19 +247,19 @@ export async function authenticateSocialHubUser(
     nome: tenant?.nome || row.name,
     role: 'TENANT',
     tenantId: tenant?.id || row.instagram_account_id || undefined,
-    companyId: tenant?.companyId || row.company_id || undefined,
+    companyId: access?.companyId || undefined,
     instagramUserId: tenant?.instagramUserId || undefined,
     instagramUsername: tenant?.username || undefined,
-    status: tenant?.status || row.status || 'AGUARDANDO_APROVACAO',
+    status: accessStatus === 'ACTIVE' ? tenant?.status || row.status || 'APROVADO' : 'AGUARDANDO_APROVACAO',
     driveFolderName: tenant?.driveFolderName || null,
     driveFolderId: tenant?.driveFolderId || null,
     connectionStatus: tenant?.connectionStatus || 'DESCONECTADO',
     tokenIssuedAt: tenant?.tokenIssuedAt,
     tokenExpiresAt: tenant?.tokenExpiresAt,
     grantedScopes: tenant?.grantedScopes || [],
-    workspaceRole: row.workspace_role || undefined,
+    workspaceRole: access?.workspaceRole || undefined,
     emailVerified: Boolean(row.email_verified_at) || undefined,
-    needsWorkspace: !row.company_id && !row.instagram_account_id,
+    accessStatus,
   };
 
   return {

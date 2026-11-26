@@ -55,6 +55,26 @@ async function insertLegacy(id: string, email: string, role: 'ADMIN' | 'TENANT',
   );
 }
 
+// A empresa nasce SEMPRE por decisão do administrador (aprovação). Estes auxiliares fazem esse passo e devolvem a sessão já liberada.
+let adminTok = '';
+async function adminToken() {
+  if (adminTok) return adminTok;
+  await insertLegacy('adm_aprova', 'admin-aprova@exemplo.com', 'ADMIN', 'Senha-Admin-2026!');
+  const l = await call('POST', '/api/auth/login', { email: 'admin-aprova@exemplo.com', password: 'Senha-Admin-2026!' });
+  adminTok = l.body.token;
+  return adminTok;
+}
+async function approveUser(userId: string, body: Record<string, unknown>) {
+  return call('POST', `/api/admin/users/${userId}/approve`, body, { token: await adminToken() });
+}
+/** Aprova o usuário numa empresa NOVA e devolve { status, body: { user, tenant, token } } como a sessão atualizada. */
+async function workspaceFor(session: { token: string; user: { id: string } }, companyName: string) {
+  const ap = await approveUser(session.user.id, { newCompanyName: companyName, role: 'OWNER' });
+  if (ap.status !== 200) return { status: ap.status, body: ap.body };
+  const me = await call('GET', '/api/auth/me', undefined, { token: session.token });
+  return { status: me.status === 200 ? 201 : me.status, body: me.body };
+}
+
 beforeAll(async () => {
   await runDatabaseMigrations();
   setMailTransportForTests(async (m) => {
@@ -88,12 +108,14 @@ describe('Cadastro público e verificação de e-mail', () => {
   it('confirmação cria usuário TENANT sem empresa e sem poder de administrador, e já entra com sessão', async () => {
     const { session } = await signupAndVerify('bia@exemplo.com', 'Bia Costa');
     expect(session.user.role).toBe('TENANT');
-    expect(session.user.needsWorkspace).toBe(true);
+    expect(session.user.accessStatus).toBe('PENDING_APPROVAL');
     expect(session.user.companyId).toBeUndefined();
+    expect((await dbQuery<any>(`SELECT status FROM memberships WHERE user_id=$1`, [session.user.id])).rows[0].status).toBe('PENDING_APPROVAL');
     const adm = await call('POST', '/api/tenants', {}, { token: session.token });
     expect(adm.status).toBe(403);
     const lista = await call('GET', '/api/tenants', undefined, { token: session.token });
-    expect(lista.body.tenants).toEqual([]); // sem espaço de trabalho, não enxerga nenhuma conta
+    expect(lista.status).toBe(403); // aguardando aprovação: sem acesso a contas de empresa
+    expect(lista.body.code).toBe('PENDING_APPROVAL');
     const row = (await dbQuery<any>(`SELECT role, company_id, email_verified_at, terms_accepted_at FROM users WHERE email='bia@exemplo.com'`)).rows[0];
     expect(row.role).toBe('TENANT');
     expect(row.company_id).toBeNull();
@@ -214,57 +236,64 @@ describe('Recuperação de senha', () => {
   });
 });
 
-describe('Espaço de trabalho e isolamento entre empresas', () => {
-  it('cria empresa exclusiva, usuário vira proprietário só dela e sem acesso administrativo; estado "sem Instagram"', async () => {
+describe('Aprovação, empresa e isolamento entre empresas', () => {
+  it('aprovado em empresa nova: usuário vira proprietário só dela e sem acesso administrativo; estado "sem Instagram"', async () => {
     const { session } = await signupAndVerify('kleber@exemplo.com', 'Kleber Dias');
-    const w = await call('POST', '/api/workspaces', { companyName: 'Padaria do Kleber' }, { token: session.token });
+    // Não existe autoconcessão: o próprio usuário não cria empresa.
+    expect((await call('POST', '/api/workspaces', { companyName: 'Padaria do Kleber' }, { token: session.token })).status).toBe(403);
+    const w = await workspaceFor(session, 'Padaria do Kleber');
     expect(w.status).toBe(201);
     expect(w.body.user.workspaceRole).toBe('OWNER');
     expect(w.body.user.role).toBe('TENANT');
-    expect(w.body.user.needsWorkspace).toBe(false);
+    expect(w.body.user.accessStatus).toBe('ACTIVE');
     expect(w.body.user.connectionStatus).toBe('DESCONECTADO');
-    expect(String(w.body.user.instagramUsername)).toMatch(/^cadastro_/);
+    expect(String(w.body.user.instagramUsername)).toMatch(/^cadastro_/); // espaço técnico; a API do administrador nunca o expõe como @
     expect(w.body.user.companyId).toMatch(/^company_[0-9a-f]{16}$/);
     expect(w.body.tenant.encryptedAccessToken).toBeUndefined();
     expect((await call('POST', '/api/tenants', {}, { token: w.body.token })).status).toBe(403);
     const propria = await call('GET', '/api/tenants', undefined, { token: w.body.token });
     expect(propria.body.tenants.map((t: any) => t.id)).toEqual([w.body.user.tenantId]); // só o próprio espaço
     expect((await call('GET', '/api/auth/me', undefined, { token: w.body.token })).status).toBe(200);
-    // segunda criação é recusada
-    expect((await call('POST', '/api/workspaces', { companyName: 'Outra' }, { token: w.body.token })).status).toBe(409);
   });
 
-  it('nome igual ao de empresa existente não vincula ninguém a ela; cada espaço é separado', async () => {
+  it('nome igual ao de empresa existente não vincula ninguém a ela; vincular exige escolher a empresa existente', async () => {
     await dbQuery(`INSERT INTO companies (id,name,drive_folder_name) VALUES ('company_legada','Loja Central','Loja Central')`);
     await dbQuery(`INSERT INTO instagram_accounts (id,company_id,username,nome,instagram_user_id,status,connection_status,has_valid_token) VALUES ('tenant_legada','company_legada','loja_central','Loja Central','1784100000009','APROVADO','CONECTADO',true)`);
     await insertLegacy('usr_legado', 'dono-legado@exemplo.com', 'TENANT', 'Senha-Legado-2026', { companyId: 'company_legada', tenantId: 'tenant_legada' });
 
     const a = await signupAndVerify('lia@exemplo.com');
-    const wa = await call('POST', '/api/workspaces', { companyName: 'Loja Central' }, { token: a.session.token });
-    expect(wa.status).toBe(201);
-    expect(wa.body.user.companyId).not.toBe('company_legada');
-    expect(wa.body.user.tenantId).not.toBe('tenant_legada');
+    const dup = await workspaceFor(a.session, 'Loja Central'); // mesmo nome: recusado, nada é vinculado
+    expect(dup.status).toBe(409);
+    const stillPending = await call('GET', '/api/auth/me', undefined, { token: a.session.token });
+    expect(stillPending.body.user.accessStatus).toBe('PENDING_APPROVAL');
     const b = await signupAndVerify('mauro@exemplo.com');
-    const wb = await call('POST', '/api/workspaces', { companyName: 'Loja Central' }, { token: b.session.token });
-    expect(wb.body.user.companyId).not.toBe(wa.body.user.companyId);
+    const wb = await workspaceFor(b.session, 'Loja Central Norte');
+    expect(wb.body.user.companyId).not.toBe('company_legada');
+    expect(wb.body.user.tenantId).not.toBe('tenant_legada');
 
+    // Só uma escolha explícita do administrador, por ID, vincula a usuária à empresa existente.
+    expect((await approveUser(a.session.user.id, { companyId: 'company_legada' })).status).toBe(200);
     const linked = (await dbQuery<any>(`SELECT count(*)::int n FROM users WHERE company_id='company_legada'`)).rows[0];
-    expect(linked.n).toBe(1); // só o dono legado
+    expect(linked.n).toBe(2); // dono legado + usuária aprovada por decisão do administrador
   });
 
-  it('não é possível passar tenant, empresa ou papel pelo corpo da requisição', async () => {
+  it('não é possível passar tenant, empresa ou papel pelo corpo da requisição; aprovar exige administrador', async () => {
     const { session } = await signupAndVerify('nina@exemplo.com');
     const w = await call('POST', '/api/workspaces', { companyName: 'Ateliê da Nina', companyId: 'company_legada', tenantId: 'tenant_legada', role: 'ADMIN', workspaceRole: 'OWNER' }, { token: session.token });
-    expect(w.status).toBe(201);
-    expect(w.body.user.companyId).not.toBe('company_legada');
-    expect(w.body.user.role).toBe('TENANT');
+    expect(w.status).toBe(403);
+    const me = await call('GET', '/api/auth/me', undefined, { token: session.token });
+    expect(me.body.user.companyId).toBeUndefined();
+    expect(me.body.user.role).toBe('TENANT');
+    const self = await call('POST', `/api/admin/users/${session.user.id}/approve`, { companyId: 'company_legada' }, { token: session.token });
+    expect(self.status).toBe(403);
+    expect((await call('GET', '/api/admin/users', undefined, { token: session.token })).status).toBe(403);
   });
 });
 
 describe('Convites', () => {
   async function owner(email: string, company: string) {
     const { session } = await signupAndVerify(email);
-    const w = await call('POST', '/api/workspaces', { companyName: company }, { token: session.token });
+    const w = await workspaceFor(session, company);
     return { token: w.body.token as string, companyId: w.body.user.companyId as string, userId: w.body.user.id as string };
   }
 
@@ -356,7 +385,7 @@ describe('Compatibilidade com usuários anteriores', () => {
     const u = await call('POST', '/api/auth/login', { email: 'antigo@exemplo.com', password: 'Senha-Antiga-2026' });
     expect(u.status).toBe(200);
     expect(u.body.user.tenantId).toBe('tenant_old');
-    expect(u.body.user.needsWorkspace).toBe(false);
+    expect(u.body.user.accessStatus).toBe('ACTIVE');
     expect(u.body.user.companyId).toBe('company_old');
     const a = await call('POST', '/api/auth/login', { email: 'admin-antigo@exemplo.com', password: 'Senha-Admin-Antiga-2026' });
     expect(a.status).toBe(200);
@@ -367,7 +396,7 @@ describe('Compatibilidade com usuários anteriores', () => {
   it('010 convive com 008 (OAuth) e 009 (senha retirada): ordem, idempotência e reversão sem efeito sobre elas', async () => {
     const versoes = async () => (await dbQuery<any>(`SELECT version FROM schema_migrations ORDER BY version`)).rows.map((r) => String(r.version));
     const ordem = await versoes();
-    expect(ordem.slice(-3)).toEqual(['008_oauth_state_and_pending_connections', '009_block_retired_default_password', '010_self_service_signup']);
+    expect(ordem.slice(-4)).toEqual(['008_oauth_state_and_pending_connections', '009_block_retired_default_password', '010_self_service_signup', '011_memberships_and_approval']);
     await runDatabaseMigrations();
     await runDatabaseMigrations(); // reaplicar não muda nada
     expect(await versoes()).toEqual(ordem);
@@ -466,7 +495,8 @@ describe('Interruptor do cadastro público (produção começa desligado)', () =
     await insertLegacy('usr_flag', 'flag@exemplo.com', 'TENANT', 'Senha-Flag-2026');
     const envAntes = { node: process.env.NODE_ENV, flag: process.env.PUBLIC_SIGNUP_ENABLED };
     process.env.NODE_ENV = 'production';
-    delete process.env.PUBLIC_SIGNUP_ENABLED;
+    // getEnv() reinjeta no processo qualquer chave do .env local que esteja ausente; por isso o "desligado" é explícito aqui.
+    process.env.PUBLIC_SIGNUP_ENABLED = 'false';
     try {
       expect((await call('GET', '/api/auth/config')).body).toEqual({ signupEnabled: false });
       const antes = outbox.length;

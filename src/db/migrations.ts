@@ -569,6 +569,60 @@ export const POSTGRES_MIGRATIONS: MigrationDefinition[] = [
       ALTER TABLE users DROP COLUMN IF EXISTS email_verified_at
     `,
   },
+  {
+    version: '011_memberships_and_approval',
+    name: 'Vínculos usuário-empresa com estado de aprovação, auditoria administrativa e responsável pela conexão Instagram',
+    sql: `
+      CREATE TABLE IF NOT EXISTS memberships (
+        id VARCHAR(64) PRIMARY KEY,
+        user_id VARCHAR(128) NOT NULL UNIQUE,
+        company_id VARCHAR(128),
+        role VARCHAR(16) NOT NULL DEFAULT 'MEMBER',
+        status VARCHAR(24) NOT NULL DEFAULT 'PENDING_APPROVAL',
+        status_reason TEXT,
+        requested_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        decided_at TIMESTAMPTZ,
+        decided_by VARCHAR(128),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_memberships_status ON memberships(status);
+      CREATE INDEX IF NOT EXISTS idx_memberships_company ON memberships(company_id);
+
+      CREATE TABLE IF NOT EXISTS admin_audit_log (
+        id VARCHAR(64) PRIMARY KEY,
+        actor_user_id VARCHAR(128),
+        action VARCHAR(48) NOT NULL,
+        target_user_id VARCHAR(128),
+        target_email VARCHAR(255),
+        company_from VARCHAR(128),
+        company_to VARCHAR(128),
+        details JSONB,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_admin_audit_target ON admin_audit_log(target_user_id, created_at);
+
+      ALTER TABLE instagram_accounts ADD COLUMN IF NOT EXISTS connected_by_user_id VARCHAR(128);
+
+      -- Preserva quem já entra hoje: usuário com empresa/conta e aprovado vira ACTIVE. Os demais aguardam aprovação.
+      INSERT INTO memberships (id, user_id, company_id, role, status, requested_at, decided_at, created_at, updated_at)
+      SELECT 'mem_' || substr(md5(u.id), 1, 20), u.id, COALESCE(u.company_id, ia.company_id),
+             CASE WHEN u.workspace_role = 'OWNER' THEN 'OWNER' ELSE 'MEMBER' END,
+             CASE WHEN u.status NOT IN ('AGUARDANDO_APROVACAO', 'PENDENTE', 'REJEITADO', 'SUSPENSO') AND COALESCE(ia.status, 'APROVADO') NOT IN ('AGUARDANDO_APROVACAO', 'PENDENTE', 'REJEITADO', 'SUSPENSO') AND (u.company_id IS NOT NULL OR u.instagram_account_id IS NOT NULL)
+                  THEN 'ACTIVE' ELSE 'PENDING_APPROVAL' END,
+             COALESCE(u.created_at, NOW()),
+             CASE WHEN u.status NOT IN ('AGUARDANDO_APROVACAO', 'PENDENTE', 'REJEITADO', 'SUSPENSO') AND COALESCE(ia.status, 'APROVADO') NOT IN ('AGUARDANDO_APROVACAO', 'PENDENTE', 'REJEITADO', 'SUSPENSO') AND (u.company_id IS NOT NULL OR u.instagram_account_id IS NOT NULL) THEN NOW() END,
+             NOW(), NOW()
+        FROM users u LEFT JOIN instagram_accounts ia ON ia.id = u.instagram_account_id
+       WHERE u.role = 'TENANT'
+      ON CONFLICT (user_id) DO NOTHING
+    `,
+    down: `
+      ALTER TABLE instagram_accounts DROP COLUMN IF EXISTS connected_by_user_id;
+      DROP TABLE IF EXISTS admin_audit_log;
+      DROP TABLE IF EXISTS memberships
+    `,
+  },
 ];
 
 export const ALL_MANAGED_TABLES = [

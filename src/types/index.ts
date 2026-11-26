@@ -292,6 +292,11 @@ export interface UserProfile {
   emailVerified?: boolean;
   /** Cadastro confirmado, mas ainda sem espaço de trabalho. */
   needsWorkspace?: boolean;
+  /** Estado de aprovação do vínculo com a empresa (lido do banco). Ausente para administradores. */
+  accessStatus?: 'PENDING_APPROVAL' | 'ACTIVE' | 'REJECTED' | 'SUSPENDED';
+  companyName?: string;
+  /** Instagram conectado pelo próprio usuário antes da aprovação; não concede acesso a empresa alguma. */
+  personalInstagram?: { username: string | null; connected: boolean } | null;
 }
 
 export interface AuthResponse {

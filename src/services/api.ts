@@ -92,6 +92,43 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
   return data as T;
 }
 
+export type AccessStatus = 'PENDING_APPROVAL' | 'ACTIVE' | 'REJECTED' | 'SUSPENDED';
+export interface AdminUserRow {
+  id: string;
+  name: string;
+  email: string;
+  createdAt: string | null;
+  emailVerified: boolean;
+  accessStatus: AccessStatus;
+  companyId: string | null;
+  companyName: string | null;
+  workspaceRole: 'OWNER' | 'MEMBER' | null;
+  instagram: { id: string; username: string | null; connected: boolean; companyId: string | null } | null;
+  lastLoginAt: string | null;
+  origin: 'EMAIL_SIGNUP' | 'INSTAGRAM_LEGACY';
+}
+export interface AdminCompanyRow {
+  id: string;
+  name: string;
+  members: number;
+  instagramConnected: boolean;
+}
+export interface AdminInstagramRow {
+  id: string;
+  username: string | null;
+  instagramUserId: string | null;
+  connected: boolean;
+  placeholder: boolean;
+  companyId: string | null;
+  companyName: string | null;
+  authorizationStatus: string;
+  connectionStatus: string;
+  needsReconnect: boolean;
+  tokenExpiresAt: string | null;
+  connectedBy: { id: string; name: string | null; email: string | null } | null;
+  createdAt: string | null;
+}
+
 export const api = {
   // Auth
   login: async (email: string, password: string): Promise<AuthResponse> => {
@@ -127,6 +164,32 @@ export const api = {
 
   acceptInvite: async (data: { token: string; name?: string; password?: string; acceptTerms?: boolean }): Promise<AuthResponse> =>
     apiFetch('/api/invites/accept', { method: 'POST', body: JSON.stringify(data) }),
+
+  // Administração: usuários/empresas e contas Instagram. Leituras direto do PostgreSQL, com prazo para nunca ficar "carregando" sem fim.
+  adminListUsers: async (): Promise<{ users: AdminUserRow[]; companies: AdminCompanyRow[]; generatedAt: string }> =>
+    apiFetch('/api/admin/users', { method: 'GET', cache: 'no-store', signal: AbortSignal.timeout(20000) }),
+  adminApproveUser: async (id: string, body: { companyId?: string; newCompanyName?: string; role?: 'OWNER' | 'MEMBER' }): Promise<{ success: boolean; message: string }> =>
+    apiFetch(`/api/admin/users/${encodeURIComponent(id)}/approve`, { method: 'POST', body: JSON.stringify(body), signal: AbortSignal.timeout(20000) }),
+  adminRejectUser: async (id: string, reason?: string): Promise<{ success: boolean; message: string }> =>
+    apiFetch(`/api/admin/users/${encodeURIComponent(id)}/reject`, { method: 'POST', body: JSON.stringify({ reason }), signal: AbortSignal.timeout(20000) }),
+  adminSuspendUser: async (id: string, reason?: string): Promise<{ success: boolean; message: string }> =>
+    apiFetch(`/api/admin/users/${encodeURIComponent(id)}/suspend`, { method: 'POST', body: JSON.stringify({ reason }), signal: AbortSignal.timeout(20000) }),
+  adminReactivateUser: async (id: string): Promise<{ success: boolean; message: string }> =>
+    apiFetch(`/api/admin/users/${encodeURIComponent(id)}/reactivate`, { method: 'POST', body: '{}', signal: AbortSignal.timeout(20000) }),
+  adminChangeUserCompany: async (id: string, companyId: string, role?: 'OWNER' | 'MEMBER'): Promise<{ success: boolean; message: string }> =>
+    apiFetch(`/api/admin/users/${encodeURIComponent(id)}/company`, { method: 'POST', body: JSON.stringify({ companyId, role }), signal: AbortSignal.timeout(20000) }),
+  adminChangeUserRole: async (id: string, role: 'OWNER' | 'MEMBER'): Promise<{ success: boolean; message: string }> =>
+    apiFetch(`/api/admin/users/${encodeURIComponent(id)}/role`, { method: 'POST', body: JSON.stringify({ role }), signal: AbortSignal.timeout(20000) }),
+  adminRemoveUserCompany: async (id: string): Promise<{ success: boolean; message: string }> =>
+    apiFetch(`/api/admin/users/${encodeURIComponent(id)}/company`, { method: 'DELETE', signal: AbortSignal.timeout(20000) }),
+  adminDeleteUser: async (id: string, confirmEmail: string): Promise<{ success: boolean; message: string }> =>
+    apiFetch(`/api/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE', body: JSON.stringify({ confirmEmail }), signal: AbortSignal.timeout(20000) }),
+  adminListInstagram: async (): Promise<{ accounts: AdminInstagramRow[]; generatedAt: string }> =>
+    apiFetch('/api/admin/instagram-accounts', { method: 'GET', cache: 'no-store', signal: AbortSignal.timeout(20000) }),
+  adminLinkInstagram: async (id: string, companyId: string): Promise<{ success: boolean; message: string }> =>
+    apiFetch(`/api/admin/instagram-accounts/${encodeURIComponent(id)}/link-company`, { method: 'POST', body: JSON.stringify({ companyId }), signal: AbortSignal.timeout(20000) }),
+  adminDisconnectInstagram: async (id: string): Promise<{ success: boolean; message: string }> =>
+    apiFetch(`/api/admin/instagram-accounts/${encodeURIComponent(id)}/disconnect`, { method: 'POST', body: '{}', signal: AbortSignal.timeout(20000) }),
 
   // Perfil atualizado do usuário autenticado (Sala de espera polling)
   getMe: async (): Promise<{ user: AuthResponse['user']; tenant?: any; token?: string }> => {
@@ -216,7 +279,7 @@ export const api = {
 
   // Tenant Accounts Management (Admin)
   getTenants: async (): Promise<{ tenants: any[]; adminAlerts?: any[] }> => {
-    return apiFetch('/api/tenants', { method: 'GET' });
+    return apiFetch('/api/tenants', { method: 'GET', cache: 'no-store', signal: AbortSignal.timeout(25000) });
   },
 
   refreshTenantToken: async (
@@ -571,7 +634,7 @@ export const api = {
 
   // Pastas conhecidas do Google Drive
   getDriveFolders: async (): Promise<{ folders: string[]; folderDetails?: Array<{ id: string; nome: string }> }> => {
-    return apiFetch('/api/drive/folders', { method: 'GET' });
+    return apiFetch('/api/drive/folders', { method: 'GET', cache: 'no-store', signal: AbortSignal.timeout(25000) });
   },
 
   // Sincronizar Agora com o Google Drive (Fluxo de 4 etapas: SINCRONIZAR_TUDO -> Persistência em /api/webhooks/drive-sync -> Cálculo de totalArquivos)
