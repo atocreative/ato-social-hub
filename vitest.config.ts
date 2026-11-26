@@ -5,7 +5,7 @@ import { defineConfig } from 'vitest/config';
 // - Testes que exigem servidor ativo em localhost:3000 ou dados do banco real NÃO fazem parte da suíte automática.
 export default defineConfig({
   test: {
-    include: ['src/services/**/*.test.ts', 'src/tests/oauth_unified_security.test.ts', 'src/tests/session_revocation.test.ts', 'src/tests/admin_reset_safety.test.ts', 'src/tests/password_trigger.test.ts', 'src/tests/tenant_logins.test.ts', 'src/tests/review_account.test.ts', 'src/tests/health_readiness.test.ts', 'src/tests/self_service_signup.test.ts', 'src/tests/public_signup_isolation.test.ts'],
+    include: ['src/services/**/*.test.ts', 'src/tests/oauth_unified_security.test.ts', 'src/tests/session_revocation.test.ts', 'src/tests/admin_reset_safety.test.ts', 'src/tests/password_trigger.test.ts', 'src/tests/tenant_logins.test.ts', 'src/tests/review_account.test.ts', 'src/tests/health_readiness.test.ts', 'src/tests/self_service_signup.test.ts', 'src/tests/public_signup_isolation.test.ts', 'src/tests/hotfix_security.test.ts'],
     // Ambiente de teste isolado: valores FICTÍCIOS e fixos. Os testes nunca dependem do .env
     // (o dotenv não sobrescreve variáveis já definidas) e nunca usam segredos reais.
     env: {

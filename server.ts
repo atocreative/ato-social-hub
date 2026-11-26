@@ -1528,7 +1528,8 @@ export function requireWebhookOrUserAuth(req: AuthenticatedRequest, res: Respons
   if (token) {
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as UserProfile;
-      if (!isSessionRevoked(decoded as any) && !isUserSessionRevoked(decoded as any)) {
+      // O webhook grava posts no sistema: por JWT só o administrador (cliente nunca), e fora de sessões revogadas.
+      if (!isSessionRevoked(decoded as any) && !isUserSessionRevoked(decoded as any) && decoded?.role === 'ADMIN') {
         req.user = decoded;
         return next();
       }
@@ -3790,6 +3791,9 @@ app.post('/api/posts/sync-drive', requireAuth, async (_req: AuthenticatedRequest
   const { folders, folderDetails } = getKnownFoldersList();
 
   if (!syncResult.ok) {
+    if (_req.user?.role === 'TENANT') {
+      return res.status(502).json({ success: false, error: 'Não foi possível atualizar agora. Tente novamente.' });
+    }
     return res.status(502).json({
       success: false,
       error: syncResult.error || 'Falha ao sincronizar com o Google Apps Script.',
@@ -6655,6 +6659,9 @@ function requireSchedulerOrAdminAuth(req: AuthenticatedRequest, res: Response, n
     }
     try {
       const decoded = jwt.verify(bearer, JWT_SECRET) as UserProfile;
+      if (isSessionRevoked(decoded as any) || decoded?.role !== 'ADMIN') {
+        return res.status(401).json({ error: 'Token de autorização inválido para o agendador.' });
+      }
       req.user = decoded;
       return next();
     } catch {
@@ -6663,7 +6670,7 @@ function requireSchedulerOrAdminAuth(req: AuthenticatedRequest, res: Response, n
   }
 
   // Permite disparo sem token apenas se nenhum segredo estiver configurado no ambiente
-  if (!cronSecret) {
+  if (!cronSecret && process.env.NODE_ENV !== 'production') {
     return next();
   }
 
@@ -6811,20 +6818,11 @@ app.get('/api/system/gas-config', requireAuth, requireAdmin, (req: Authenticated
   const currentOrigin = APP_URL || `${req.protocol}://${req.get('host')}`;
   const webhookEndpoint = `${currentOrigin}/api/webhooks/drive-sync`;
 
-  const tenYearJwt = jwt.sign(
-    {
-      id: 'gas_long_lived_service',
-      email: 'drive-sync@atosocial.com',
-      role: 'ADMIN',
-    },
-    JWT_SECRET,
-    { expiresIn: '3650d' }
-  );
-
+  // Nenhum token administrativo e nenhum segredo sai desta rota: o Apps Script guarda o próprio WEBHOOK_SECRET_TOKEN
+  // (propriedade do script) e o valor de referência fica apenas nas variáveis do servidor.
   return res.json({
     webhookUrl: webhookEndpoint,
-    webhookSecretToken: WEBHOOK_SECRET_TOKEN,
-    tenYearJwt,
+    webhookSecretConfigured: Boolean(WEBHOOK_SECRET_TOKEN),
     gasWebhookUrl: GOOGLE_APPS_SCRIPT_URL,
     gasProjectUrl: 'https://script.google.com/home/projects/1ldr5Fxf3ikysc2oxOhyBFYrpy6xXkkkzWJtic41k1WfXaQbjpw9z8Fdl/edit?hl=pt-br',
     instagramConnectedAccount: {
