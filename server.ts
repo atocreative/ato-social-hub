@@ -2119,6 +2119,7 @@ function renderOAuthErrorHtmlPage(userMessage: string, reasonCode: string, step:
     <div class="logo">ATO<span>.</span></div>
     <h2>Conexão não concluída</h2>
     <p id="user-error-msg">${safeMessage}</p>
+    <p style="font-size:11px;color:#6B7280;margin:-12px 0 20px;font-family:monospace">Código: ${String(step).replace(/[^A-Za-z0-9_.-]/g,"").slice(0,60)} / ${String(reasonCode).replace(/[^A-Za-z0-9_.-]/g,"").slice(0,60)}</p>
     <button class="btn" onclick="fecharJanela()">Voltar ao ATO Social Hub</button>
   </div>
   <script>
