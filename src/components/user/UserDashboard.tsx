@@ -13,6 +13,8 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ posts, now }) => {
   const summary = useMemo(() => summarizePosts(posts, today), [posts, today]);
   const next = useMemo(() => upcomingPosts(posts, today, 6), [posts, today]);
 
+  const isEmptyWorkspace = posts.length === 0;
+
   const cards = [
     { label: 'Agendados', value: summary.scheduled, tone: 'text-[#10B981]' },
     { label: 'Publicados na semana', value: summary.publishedThisWeek, tone: 'text-white' },
@@ -25,6 +27,16 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({ posts, now }) => {
         <h1 className="text-2xl font-bold">Dashboard</h1>
         <p className="text-sm text-[#8E8E93] mt-1">Visão geral das suas publicações.</p>
       </header>
+
+      {isEmptyWorkspace && (
+        <section className="bg-[#121212] border border-[#242424] rounded-2xl p-6" data-testid="empty-workspace">
+          <h2 className="text-base font-semibold">Seu espaço de trabalho ainda está vazio</h2>
+          <p className="text-sm text-[#8E8E93] mt-2 leading-relaxed">
+            Quando houver mídias para revisar, elas aparecem aqui. Os conteúdos chegam pela pasta do Google Drive vinculada à sua empresa
+            ou pelo envio de mídia, quando disponível para a sua conta. Nenhum conteúdo de exemplo é criado automaticamente.
+          </p>
+        </section>
+      )}
 
       <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {cards.map((c) => (

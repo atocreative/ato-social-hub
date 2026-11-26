@@ -196,8 +196,10 @@ export async function authenticateSocialHubUser(
     status: TenantStatus;
     company_id: string | null;
     instagram_account_id: string | null;
+    workspace_role: 'OWNER' | 'MEMBER' | null;
+    email_verified_at: string | Date | null;
   }>(
-    'SELECT id, email, name, password_hash, role, status, company_id, instagram_account_id FROM users WHERE LOWER(email) = $1 LIMIT 1',
+    'SELECT id, email, name, password_hash, role, status, company_id, instagram_account_id, workspace_role, email_verified_at FROM users WHERE LOWER(email) = $1 LIMIT 1',
     [cleanEmail]
   );
 
@@ -250,6 +252,9 @@ export async function authenticateSocialHubUser(
     tokenIssuedAt: tenant?.tokenIssuedAt,
     tokenExpiresAt: tenant?.tokenExpiresAt,
     grantedScopes: tenant?.grantedScopes || [],
+    workspaceRole: row.workspace_role || undefined,
+    emailVerified: Boolean(row.email_verified_at) || undefined,
+    needsWorkspace: !row.company_id && !row.instagram_account_id,
   };
 
   return {
@@ -2547,8 +2552,8 @@ export async function resolveCompanyRecordForSession(params: {
     } catch {}
   }
 
-  // Sem nenhum identificador, só o administrador pode cair no padrão ("Ato"). Um cliente sem empresa
-  // nunca é anexado a uma empresa existente por este caminho.
+  // Sem nenhum identificador, só o administrador pode cair no padrão ("Ato"). Um cliente sem espaço de trabalho
+  // (cadastro público) nunca é anexado a uma empresa existente por este caminho.
   if (userId && !driveFolderName && !companyIdInput && !tenantId && !instagramUsername) {
     const who = await dbQuery<{ role: string }>(`SELECT role FROM users WHERE id = $1 LIMIT 1`, [userId]).catch(() => ({ rows: [] as { role: string }[] }));
     if (who.rows[0]?.role !== 'ADMIN') {

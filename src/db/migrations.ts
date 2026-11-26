@@ -524,6 +524,51 @@ export const POSTGRES_MIGRATIONS: MigrationDefinition[] = [
       DROP FUNCTION IF EXISTS ato_block_retired_default_password()
     `,
   },
+  {
+    version: '010_self_service_signup',
+    name: 'Cadastro público: e-mail verificado, papel no espaço de trabalho, tokens de uso único e limite de tentativas',
+    sql: `
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified_at TIMESTAMPTZ;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS workspace_role VARCHAR(16);
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS sessions_valid_after TIMESTAMPTZ;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ;
+
+      -- Usuários que já existem continuam entrando: o e-mail deles já era a credencial vigente.
+      UPDATE users SET email_verified_at = COALESCE(created_at, NOW()) WHERE email_verified_at IS NULL;
+      -- workspace_role NULL = usuário anterior ao cadastro público. Ninguém vira dono nem administrador por esta migração.
+
+      CREATE TABLE IF NOT EXISTS auth_tokens (
+        id VARCHAR(64) PRIMARY KEY,
+        purpose VARCHAR(24) NOT NULL,
+        token_hash VARCHAR(64) NOT NULL UNIQUE,
+        user_id VARCHAR(128),
+        email VARCHAR(255) NOT NULL,
+        company_id VARCHAR(128),
+        invited_by VARCHAR(128),
+        payload JSONB,
+        expires_at TIMESTAMPTZ NOT NULL,
+        used_at TIMESTAMPTZ,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_auth_tokens_user_purpose ON auth_tokens(user_id, purpose);
+      CREATE INDEX IF NOT EXISTS idx_auth_tokens_expires ON auth_tokens(expires_at);
+
+      CREATE TABLE IF NOT EXISTS auth_rate_limits (
+        bucket VARCHAR(190) NOT NULL,
+        window_start TIMESTAMPTZ NOT NULL,
+        hits INTEGER NOT NULL DEFAULT 1,
+        PRIMARY KEY (bucket, window_start)
+      )
+    `,
+    down: `
+      DROP TABLE IF EXISTS auth_rate_limits;
+      DROP TABLE IF EXISTS auth_tokens;
+      ALTER TABLE users DROP COLUMN IF EXISTS terms_accepted_at;
+      ALTER TABLE users DROP COLUMN IF EXISTS sessions_valid_after;
+      ALTER TABLE users DROP COLUMN IF EXISTS workspace_role;
+      ALTER TABLE users DROP COLUMN IF EXISTS email_verified_at
+    `,
+  },
 ];
 
 export const ALL_MANAGED_TABLES = [

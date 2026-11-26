@@ -26,6 +26,10 @@ export const AccountView: React.FC<AccountViewProps> = ({ user, onAccountDeleted
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reconnecting, setReconnecting] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteMsg, setInviteMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [inviting, setInviting] = useState(false);
+  const isOwner = user.workspaceRole === 'OWNER';
 
   const canDelete =
     normalizeUsername(confirmInput) !== '' &&
@@ -42,6 +46,21 @@ export const AccountView: React.FC<AccountViewProps> = ({ user, onAccountDeleted
       setError(err.message || 'Não foi possível iniciar a reconexão.');
     } finally {
       setReconnecting(false);
+    }
+  };
+
+  const handleInvite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setInviteMsg(null);
+    setInviting(true);
+    try {
+      const res = await api.createInvite(inviteEmail.trim());
+      setInviteMsg({ ok: true, text: res.message || 'Convite enviado.' });
+      setInviteEmail('');
+    } catch (err: any) {
+      setInviteMsg({ ok: false, text: err.message || 'Não foi possível enviar o convite.' });
+    } finally {
+      setInviting(false);
     }
   };
 
@@ -113,6 +132,32 @@ export const AccountView: React.FC<AccountViewProps> = ({ user, onAccountDeleted
           postar somente o conteúdo que você aprovar. Nenhuma publicação é feita sem a sua confirmação.
         </p>
       </section>
+
+      {isOwner && (
+        <section className="bg-[#121212] border border-[#242424] rounded-2xl p-6 space-y-3">
+          <h2 className="text-base font-semibold">Convidar pessoas</h2>
+          <p className="text-xs text-[#8E8E93] leading-relaxed">
+            Quem você convidar acessa somente este espaço de trabalho, com permissão de membro. O convite vale por 7 dias e só pode ser usado uma vez.
+          </p>
+          <form onSubmit={handleInvite} className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="email"
+              required
+              value={inviteEmail}
+              onChange={(e) => setInviteEmail(e.target.value)}
+              placeholder="email@convidado.com"
+              aria-label="E-mail da pessoa convidada"
+              className="flex-1 bg-[#0A0A0A] border border-[#242424] focus:border-[#10B981] rounded-lg px-3 py-2 text-sm text-white placeholder-[#4E4E52] outline-none"
+            />
+            <button type="submit" disabled={inviting} className="px-4 py-2 rounded-lg bg-[#10B981] hover:bg-[#0EA271] text-[#0A0A0A] text-sm font-semibold cursor-pointer disabled:opacity-50">
+              {inviting ? 'Enviando...' : 'Enviar convite'}
+            </button>
+          </form>
+          {inviteMsg && (
+            <p role="status" className={`text-xs ${inviteMsg.ok ? 'text-[#10B981]' : 'text-[#EF4444]'}`}>{inviteMsg.text}</p>
+          )}
+        </section>
+      )}
 
       <section className="bg-[#121212] border border-[#EF4444]/30 rounded-2xl p-6 space-y-4">
         <h2 className="text-base font-semibold text-[#EF4444]">Excluir minha conta</h2>

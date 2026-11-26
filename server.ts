@@ -72,6 +72,9 @@ import {
   isRailwayDatabaseUrlConfigured,
 } from './src/db/pool.ts';
 import { runDatabaseMigrations, getAppliedMigrations, checkDeployReadiness } from './src/db/migrations.ts';
+import { createAccountRouter } from './src/routes/accountRoutes.ts';
+import { getUserProfile } from './src/services/accounts.ts';
+import { allowAttempt, hashForBucket } from './src/services/authTokens.ts';
 import {
   ensureDefaultAdminUser,
   authenticateAdminUser,
@@ -283,6 +286,13 @@ function getEnv() {
   };
 }
 
+// Atrás do proxy do Railway: sem isto req.ip seria o do proxy e o limite de tentativas valeria para todos juntos.
+app.set('trust proxy', 1);
+app.use((_req, res, next) => {
+  // Links de e-mail carregam tokens na URL: nunca vazam para outros sites via Referer.
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  next();
+});
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
@@ -1425,6 +1435,33 @@ export function isSessionRevoked(decoded: { iat?: number } | null | undefined, r
   return iatMs < cutoffMs;
 }
 
+// Sessões por usuário: a redefinição de senha grava users.sessions_valid_after. O mapa é consultado de forma
+// síncrona pelo requireAuth e recarregado do banco a cada 30 s (vale também para várias instâncias).
+const userSessionCutoffMs = new Map<string, number>();
+export function markUserSessionsRevoked(userId: string, atMs: number = Date.now()) {
+  userSessionCutoffMs.set(userId, atMs);
+}
+export function isUserSessionRevoked(decoded: { id?: string; iat?: number } | null | undefined): boolean {
+  const cutoff = decoded?.id ? userSessionCutoffMs.get(String(decoded.id)) : undefined;
+  if (cutoff === undefined) return false;
+  const iat = Number(decoded?.iat);
+  if (!Number.isFinite(iat)) return true;
+  return iat < Math.floor(cutoff / 1000);
+}
+export async function refreshUserSessionCutoffs(): Promise<void> {
+  try {
+    const r = await dbQuery<{ id: string; sessions_valid_after: string | Date }>(
+      'SELECT id, sessions_valid_after FROM users WHERE sessions_valid_after IS NOT NULL'
+    );
+    for (const row of r.rows) {
+      const ms = new Date(row.sessions_valid_after).getTime();
+      if (Number.isFinite(ms)) userSessionCutoffMs.set(row.id, Math.max(ms, userSessionCutoffMs.get(row.id) || 0));
+    }
+  } catch {
+    // Falha transitória do banco não derruba a autenticação; o próximo ciclo tenta de novo.
+  }
+}
+
 // 1. Autenticação para Usuários do Painel (JWT para Admin e Tenant)
 export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const { JWT_SECRET } = getEnv();
@@ -1438,7 +1475,7 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as UserProfile;
-    if (isSessionRevoked(decoded as any)) {
+    if (isSessionRevoked(decoded as any) || isUserSessionRevoked(decoded as any)) {
       return res.status(401).json({ error: 'Sessão encerrada por segurança. Faça login novamente.' });
     }
     req.user = decoded;
@@ -1492,7 +1529,7 @@ export function requireWebhookOrUserAuth(req: AuthenticatedRequest, res: Respons
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as UserProfile;
       // O webhook grava posts no sistema: por JWT só o administrador (cliente nunca), e fora de sessões revogadas.
-      if (!isSessionRevoked(decoded as any) && decoded?.role === 'ADMIN') {
+      if (!isSessionRevoked(decoded as any) && !isUserSessionRevoked(decoded as any) && decoded?.role === 'ADMIN') {
         req.user = decoded;
         return next();
       }
@@ -1541,6 +1578,11 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
   if (!email || !password) {
     return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
   }
+
+  // Limite de tentativas por IP e por e-mail (o bloqueio por e-mail não revela se a conta existe).
+  const tooMany = () => res.status(429).json({ error: 'Muitas tentativas de acesso. Aguarde alguns minutos e tente novamente.', code: 'RATE_LIMITED' });
+  if (!(await allowAttempt(`login:ip:${req.ip}`, 40, 900))) return tooMany();
+  if (!(await allowAttempt(`login:email:${hashForBucket(String(email))}`, 10, 900))) return tooMany();
 
   const authResult = await authenticateSocialHubUser(String(email), String(password));
 
@@ -1592,69 +1634,25 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
   });
 });
 
-// A2. Cadastro próprio no ATO Social Hub (separado da conexão Instagram, entra na fila de aprovação sem privilégio admin)
-app.post('/api/auth/register', async (req: Request, res: Response) => {
-  loadDatabaseFromDisk();
+// A2. Cadastro público, verificação de e-mail, redefinição de senha, espaço de trabalho e convites.
+// (Substitui o antigo /api/auth/register, que criava sessão sem confirmar o e-mail.)
+async function issueSessionForUser(userId: string) {
+  if (!testStateOverrideActive) {
+    await syncStateFromPostgres(true);
+  }
+  const p = await getUserProfile(userId);
+  if (!p) return null;
   const { JWT_SECRET } = getEnv();
   const encKey = getTokenEncryptionKey() || JWT_SECRET;
-  const { name, nome, email, password, companyName, empresa } = req.body || {};
-
-  const cleanName = String(name || nome || '').trim();
-  const cleanEmail = String(email || '').trim().toLowerCase();
-  const cleanPassword = String(password || '');
-  const cleanCompany = String(companyName || empresa || '').trim();
-
-  if (!cleanName || !cleanEmail || !cleanPassword) {
-    return res.status(400).json({
-      error: 'Nome, e-mail e senha são obrigatórios para solicitar cadastro.',
-    });
+  let safeTenant: TenantAccount | undefined;
+  if (p.tenant) {
+    const memTenant = tenants.find((t) => t.id === p.tenant.id) || p.tenant;
+    safeTenant = sanitizeTenantForClient(memTenant, encKey);
   }
-
-  if (!cleanEmail.includes('@') || cleanEmail.length < 5) {
-    return res.status(400).json({
-      error: 'Informe um endereço de e-mail válido.',
-    });
-  }
-
-  if (cleanPassword.length < 6) {
-    return res.status(400).json({
-      error: 'A senha deve possuir pelo menos 6 caracteres.',
-    });
-  }
-
-  try {
-    const { user, tenant } = await registerSocialHubUser({
-      name: cleanName,
-      email: cleanEmail,
-      password: cleanPassword,
-      companyName: cleanCompany || undefined,
-    });
-
-    const existingIdx = tenants.findIndex((t) => t.id === tenant.id);
-    if (existingIdx === -1) {
-      tenants.push(tenant);
-    } else {
-      tenants[existingIdx] = tenant;
-    }
-    saveDatabaseToDisk();
-
-    const safeTenant = sanitizeTenantForClient(tenant, encKey);
-    const token = jwt.sign(user, JWT_SECRET, { expiresIn: '72h' });
-
-    return res.status(201).json({
-      success: true,
-      token,
-      user,
-      tenant: safeTenant,
-      message:
-        'Cadastro recebido com sucesso! Sua conta entrou na fila de aprovação administrativa. Após a aprovação, você poderá conectar sua conta profissional do Instagram.',
-    });
-  } catch (err: any) {
-    return res.status(400).json({
-      error: err?.message || 'Não foi possível concluir o cadastro.',
-    });
-  }
-});
+  const token = jwt.sign(p.user, JWT_SECRET, { expiresIn: '72h' });
+  return { token, user: p.user, tenant: safeTenant };
+}
+app.use('/api', createAccountRouter({ requireAuth, issueSession: issueSessionForUser, onSessionsRevoked: (id) => markUserSessionsRevoked(id) }));
 
 // Helper para restaurar agendamentos pausados quando uma conta reconecta com sucesso
 function restoreAccountOnReconnect(tenant: TenantAccount) {
@@ -1695,6 +1693,14 @@ app.get('/api/auth/me', requireAuth, async (req: AuthenticatedRequest, res: Resp
   const { JWT_SECRET } = getEnv();
   const user = req.user!;
   if (user.role === 'TENANT') {
+    // Cadastro recém-confirmado, ainda sem espaço de trabalho: não há conta Instagram nem empresa para procurar.
+    if (!user.tenantId && !user.instagramUsername && !user.instagramUserId) {
+      const fresh = await getUserProfile(user.id);
+      if (fresh?.user.needsWorkspace) {
+        const tk = jwt.sign(fresh.user, JWT_SECRET, { expiresIn: '72h' });
+        return res.json({ user: fresh.user, token: tk });
+      }
+    }
     let tenant = tenants.find(
       (t) =>
         (user.tenantId && t.id === user.tenantId) ||
@@ -5422,6 +5428,16 @@ async function executePostPublishNow(params: {
  * POST /api/instagram/publish
  * Recebe: { id, driveFileId, caption, accountId / tenantId }
  */
+// Conta de destino utilizável: não é o registro provisório de um espaço de trabalho novo e não está desconectada.
+export function isTenantConnectedForPublishing(t: Pick<TenantAccount, 'username' | 'instagramUserId' | 'connectionStatus'> | null | undefined): boolean {
+  if (!t) return false;
+  if (String(t.instagramUserId || '').startsWith('pending_ig_')) return false;
+  if (String(t.username || '').toLowerCase().startsWith('cadastro_')) return false;
+  return t.connectionStatus !== 'DESCONECTADO';
+}
+const INSTAGRAM_NOT_CONNECTED_MESSAGE =
+  'Conecte uma conta profissional do Instagram em "Conta" antes de agendar ou publicar. Enquanto isso, você pode revisar e aprovar os conteúdos.';
+
 app.post('/api/instagram/publish', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   loadDatabaseFromDisk();
   const { id, driveFileId, caption = '', accountId, tenantId } = req.body || {};
@@ -5454,6 +5470,13 @@ app.post('/api/instagram/publish', requireAuth, async (req: AuthenticatedRequest
       success: false,
       error: 'Acesso negado: você não possui permissão para publicar conteúdos de outra empresa.',
     });
+  }
+
+  if (req.user?.role === 'TENANT') {
+    const own = tenants.find((t) => t.id === req.user?.tenantId);
+    if (!isTenantConnectedForPublishing(own)) {
+      return res.status(409).json({ success: false, code: 'INSTAGRAM_NOT_CONNECTED', error: INSTAGRAM_NOT_CONNECTED_MESSAGE });
+    }
   }
 
   const explicitAccountId = accountId || tenantId;
@@ -6191,6 +6214,13 @@ app.post('/api/posts/:id/publish', requireAuth, async (req: AuthenticatedRequest
     });
   }
 
+  if (action === 'NOW' || action === 'SCHEDULE') {
+    const blocked = req.user?.role === 'TENANT' ? !isTenantConnectedForPublishing(targetTenant) : Boolean(targetTenant) && !isTenantConnectedForPublishing(targetTenant);
+    if (blocked) {
+      return res.status(409).json({ success: false, code: 'INSTAGRAM_NOT_CONNECTED', error: INSTAGRAM_NOT_CONNECTED_MESSAGE });
+    }
+  }
+
   if (action === 'NOW') {
     if (post.status === 'REPROVADO' || post.status === 'CANCELADO') {
       return res.status(400).json({
@@ -6915,6 +6945,10 @@ async function startServer() {
   //   executando verificação imediata de tokens na largada, verificação diária/periódica (a cada 6h)
   //   e processamento de agendamentos (a cada 20s), além de continuar aceitando chamadas externas
   //   em /api/scheduler/refresh-tokens e /api/scheduler/run.
+  if (!process.env.VITEST && !process.env.ATO_TEST_MODE) {
+    void refreshUserSessionCutoffs();
+    setInterval(() => void refreshUserSessionCutoffs(), 30_000).unref();
+  }
   const schedulerMode = resolveSchedulerMode();
   if (!process.env.VITEST && !process.env.ATO_TEST_MODE && schedulerMode !== 'disabled') {
     const intervalMs = resolveWorkerIntervalMs();
