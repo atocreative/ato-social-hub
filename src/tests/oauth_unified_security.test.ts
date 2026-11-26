@@ -64,6 +64,10 @@ function installFakeGraph() {
     const m = url.match(/\/v27\.0\/(\d+)\?fields=/);
     if (m) {
       const acc = graph.accounts.find((a) => a.id === m[1]);
+      // Simula objetos da Graph API que não têm o campo account_type (erro 100 "nonexisting field").
+      if (acc && (graph as any).noAccountTypeField && url.includes('account_type')) {
+        return json(400, { error: { message: '(#100) Tried accessing nonexisting field (account_type)', type: 'OAuthException', code: 100 } });
+      }
       return acc
         ? json(200, { id: acc.id, username: acc.username, account_type: acc.account_type || 'BUSINESS' })
         : json(400, { error: { message: 'unknown', code: 100 } });
@@ -536,6 +540,18 @@ describe('Unified Login — segurança de autenticação, vínculo por ID e isol
       } finally {
         setMailTransportForTests(null);
       }
+    }, 30000);
+
+    it('conta cujo objeto não tem o campo account_type (erro 100) conecta normalmente, confirmando identidade só com id e username', async () => {
+      resetGraph();
+      (graph as any).noAccountTypeField = true;
+      await seedTenant('tenant_sem_account_type', { driveFolderName: 'Sem Account Type' });
+      const { state, cookie } = await startFlow(tenantUser('tenant_sem_account_type'));
+      const cb = await callback(state, cookie);
+      expect(cb.status).toBe(200);
+      const acc = await getInstagramAccountByIdOrUser('tenant_sem_account_type');
+      expect(acc?.connectionStatus).toBe('CONECTADO');
+      expect(acc?.instagramUserId).toBe(graph.accounts[0].id);
     }, 30000);
 
     it('J. usuário aguardando aprovação conecta o PRÓPRIO Instagram: fica como conexão pessoal e não ganha acesso a empresa alguma', async () => {

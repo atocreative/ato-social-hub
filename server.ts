@@ -2566,11 +2566,17 @@ async function linkInstagramAccountToCompany(params: {
   }
 
   // Etapa 2 — confirma a identidade diretamente na Graph API com o token recebido.
-  const profileUrl = `${igGraphBase('unified')}/${encodeURIComponent(params.account.id)}?fields=id,username,account_type&access_token=${encodeURIComponent(plainToken)}`;
+  const profileUrlFor = (fields: string) => `${igGraphBase('unified')}/${encodeURIComponent(params.account.id)}?fields=${fields}&access_token=${encodeURIComponent(plainToken)}`;
   let profile: any = {};
   try {
-    const profRes = await fetchFn(profileUrl, { method: 'GET' });
-    const raw = await profRes.text().catch(() => '');
+    let profRes = await fetchFn(profileUrlFor('id,username,account_type'), { method: 'GET' });
+    let raw = await profRes.text().catch(() => '');
+    // Alguns tipos de objeto da Graph API não têm o campo account_type e respondem erro 100 mesmo com a conta autorizada.
+    // Nesse caso confirma a identidade só com id e username (as contas de Unified Login já são profissionais).
+    if (!profRes.ok && /"code"s*:s*100/.test(raw)) {
+      profRes = await fetchFn(profileUrlFor('id,username'), { method: 'GET' });
+      raw = await profRes.text().catch(() => '');
+    }
     // Preserva IDs numéricos grandes sem perda de precisão.
     const exactId = raw.match(/"id"\s*:\s*"?(\d+)"?/)?.[1];
     profile = raw ? JSON.parse(raw) : {};
