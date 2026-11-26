@@ -61,6 +61,8 @@ O antigo `/api/auth/register` criava sessão sem confirmar o e-mail, aceitava se
 
 ## 8. Procedimento de deploy seguro
 
+> Versão atual e checklist completo em `VALIDACAO-E-PUBLICACAO.md` (inclui o interruptor `PUBLIC_SIGNUP_ENABLED`, desligado por padrão em produção). Os passos abaixo são o resumo original.
+
 1. Resolver antes o deploy pendente (`recovery/meta-review` ou `main` + `prep/untrack-data`); esta branch **não** deve ir junto.
 2. Configurar o domínio no Resend e as variáveis `RESEND_API_KEY` e `MAIL_FROM` no Railway; testar o envio a uma caixa real.
 3. Cópia lógica (schema `backup_pre_010`, como no plano de deploy) e conferir `schema_migrations` terminando em `009`.
