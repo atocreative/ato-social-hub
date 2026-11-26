@@ -2552,6 +2552,15 @@ export async function resolveCompanyRecordForSession(params: {
     } catch {}
   }
 
+  // Sem nenhum identificador, só o administrador pode cair no padrão ("Ato"). Um cliente sem espaço de trabalho
+  // (cadastro público) nunca é anexado a uma empresa existente por este caminho.
+  if (userId && !driveFolderName && !companyIdInput && !tenantId && !instagramUsername) {
+    const who = await dbQuery<{ role: string }>(`SELECT role FROM users WHERE id = $1 LIMIT 1`, [userId]).catch(() => ({ rows: [] as { role: string }[] }));
+    if (who.rows[0]?.role !== 'ADMIN') {
+      throw new Error('Acesso negado: o usuário ainda não possui espaço de trabalho.');
+    }
+  }
+
   // 4. Fallback: Determine company name to create or upsert
   const rawName = (
     driveFolderName ||

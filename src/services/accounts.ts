@@ -3,7 +3,7 @@ import { dbQuery, withTransaction } from '../db/pool.ts';
 import { getInstagramAccountByIdOrUser } from '../db/repository.ts';
 import { hashPassword } from '../utils/passwordHash.ts';
 import { consumeToken, issueToken, peekToken } from './authTokens.ts';
-import { mailTemplates, sendMail } from './mailer.ts';
+import { mailTemplates, sendMail, sendMailBackground } from './mailer.ts';
 import type { UserProfile } from '../types/index.ts';
 
 export class AccountError extends Error {
@@ -59,7 +59,7 @@ export async function requestSignup(input: SignupInput): Promise<void> {
   const passwordHash = hashPassword(password); // sempre calculado: o tempo de resposta não revela se o e-mail existe
   const existing = await dbQuery<{ id: string }>('SELECT id FROM users WHERE LOWER(email) = $1 LIMIT 1', [email]);
   if (existing.rows.length > 0) {
-    await sendMail(mailTemplates.alreadyRegistered(email));
+    sendMailBackground(mailTemplates.alreadyRegistered(email));
     return;
   }
   const token = await issueToken({
@@ -67,7 +67,7 @@ export async function requestSignup(input: SignupInput): Promise<void> {
     email,
     payload: { name, passwordHash, termsAcceptedAt: new Date().toISOString() },
   });
-  await sendMail(mailTemplates.verifyEmail(email, name, token));
+  sendMailBackground(mailTemplates.verifyEmail(email, name, token));
 }
 
 /** Confirma o e-mail e só então cria o usuário (TENANT, sem empresa e sem papel de administrador). */
@@ -100,7 +100,7 @@ export async function requestPasswordReset(emailInput: unknown): Promise<void> {
   const row = u.rows[0];
   if (!row || row.role !== 'TENANT' || !row.password_hash) return;
   const token = await issueToken({ purpose: 'PASSWORD_RESET', email, userId: row.id });
-  await sendMail(mailTemplates.resetPassword(email, token));
+  sendMailBackground(mailTemplates.resetPassword(email, token));
 }
 
 export async function resetPassword(rawToken: string, newPassword: unknown): Promise<{ userId: string }> {
@@ -141,18 +141,28 @@ export async function createWorkspace(userId: string, input: { companyName: unkn
     const tenantId = `tenant_${hex(8)}`;
     // O nome da empresa é único no banco, mas o nome informado nunca vincula ninguém a empresa existente:
     // em colisão, o espaço novo recebe um sufixo interno e continua exclusivo deste usuário.
-    const taken = await tx.query('SELECT 1 FROM companies WHERE LOWER(name) = LOWER($1)', [companyName]);
+    // O nome também não pode coincidir com a pasta do Drive de nenhum cliente, porque várias rotas antigas
+    // resolvem empresa e posts por nome de pasta.
+    const taken = await tx.query(
+      `SELECT 1 FROM companies WHERE LOWER(name) = LOWER($1) OR LOWER(COALESCE(drive_folder_name, '')) = LOWER($1)
+       UNION ALL SELECT 1 FROM instagram_accounts WHERE LOWER(COALESCE(drive_folder_name, '')) = LOWER($1)
+       UNION ALL SELECT 1 FROM posts WHERE LOWER(COALESCE(drive_folder_name, '')) = LOWER($1)
+       LIMIT 1`,
+      [companyName]
+    );
     const storedName = taken.rows.length > 0 ? `${companyName} (${hex(2)})` : companyName;
+    // A pasta do espaço novo é um identificador interno, nunca derivado do texto digitado: não colide com nada.
+    const folderKey = `workspace_${hex(8)}`;
 
     await tx.query(
       `INSERT INTO companies (id, name, drive_folder_name, created_at, updated_at) VALUES ($1, $2, $3, NOW(), NOW())`,
-      [companyId, storedName, storedName]
+      [companyId, storedName, folderKey]
     );
     await tx.query(
       `INSERT INTO instagram_accounts
          (id, company_id, username, nome, instagram_user_id, drive_folder_name, status, connection_status, has_valid_token, granted_scopes, requested_at, approved_at, created_at, updated_at)
        VALUES ($1, $2, $3, $4, $5, $6, 'APROVADO', 'DESCONECTADO', FALSE, '[]'::jsonb, NOW(), NOW(), NOW(), NOW())`,
-      [tenantId, companyId, `cadastro_${hex(6)}`, workspaceName, `pending_ig_${hex(6)}`, storedName]
+      [tenantId, companyId, `cadastro_${hex(6)}`, workspaceName, `pending_ig_${hex(6)}`, folderKey]
     );
     await tx.query(
       `UPDATE users SET company_id = $2, instagram_account_id = $3, workspace_role = 'OWNER', updated_at = NOW() WHERE id = $1`,

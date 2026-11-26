@@ -364,6 +364,35 @@ describe('Compatibilidade com usuários anteriores', () => {
     expect((await call('GET', '/api/tenants', undefined, { token: a.body.token })).status).toBe(200);
   });
 
+  it('010 convive com 008 (OAuth) e 009 (senha retirada): ordem, idempotência e reversão sem efeito sobre elas', async () => {
+    const versoes = async () => (await dbQuery<any>(`SELECT version FROM schema_migrations ORDER BY version`)).rows.map((r) => String(r.version));
+    const ordem = await versoes();
+    expect(ordem.slice(-3)).toEqual(['008_oauth_state_and_pending_connections', '009_block_retired_default_password', '010_self_service_signup']);
+    await runDatabaseMigrations();
+    await runDatabaseMigrations(); // reaplicar não muda nada
+    expect(await versoes()).toEqual(ordem);
+
+    const tabelas008 = ['oauth_states', 'oauth_used_codes', 'oauth_pending_connections'];
+    const existe = async (t: string) => Boolean((await dbQuery<any>(`SELECT to_regclass($1) t`, [t])).rows[0].t);
+    const gatilho = async () => (await dbQuery<any>(`SELECT 1 FROM pg_trigger WHERE tgname='trg_users_block_retired_default_password'`)).rows.length === 1;
+    const tentaSenhaRetirada = async (id: string) => {
+      const sha = crypto.createHash('sha256').update('666666').digest('hex');
+      await dbQuery(`INSERT INTO users (id,email,name,password_hash,role,status) VALUES ($1,$2,'x',$3,'TENANT','APROVADO')`, [id, `${id}@exemplo.com`, sha]);
+      return (await dbQuery<any>(`SELECT password_hash FROM users WHERE id=$1`, [id])).rows[0].password_hash as string;
+    };
+
+    for (const t of tabelas008) expect(await existe(t)).toBe(true);
+    expect(await gatilho()).toBe(true);
+    expect(await tentaSenhaRetirada('usr_compat_a')).toBe('disabled$blocked_retired_default_password'); // a 009 continua valendo com a 010 aplicada
+
+    await rollbackMigration('010_self_service_signup');
+    for (const t of tabelas008) expect(await existe(t)).toBe(true); // reverter a 010 não toca na 008
+    expect(await gatilho()).toBe(true); // nem na 009
+    expect(await tentaSenhaRetirada('usr_compat_b')).toBe('disabled$blocked_retired_default_password');
+    await runDatabaseMigrations();
+    expect(await versoes()).toEqual(ordem);
+  });
+
   it('migração 010 é reversível sem tocar nos dados de negócio', async () => {
     const before = (await dbQuery<any>(`SELECT count(*)::int n FROM users`)).rows[0].n;
     await rollbackMigration('010_self_service_signup');
@@ -371,6 +400,94 @@ describe('Compatibilidade com usuários anteriores', () => {
     expect((await dbQuery<any>(`SELECT to_regclass('auth_tokens') t`)).rows[0].t).toBeNull();
     await runDatabaseMigrations();
     expect((await dbQuery<any>(`SELECT to_regclass('auth_tokens') t`)).rows[0].t).toBeTruthy();
+  });
+});
+
+describe('Proteção contra cadastros automatizados e enumeração', () => {
+  it('campo-isca preenchido: resposta idêntica, mas nada é criado nem enviado', async () => {
+    const antes = outbox.length;
+    const r = await call('POST', '/api/auth/signup', { name: 'Robô Teste', email: 'robo@exemplo.com', password: STRONG, acceptTerms: true, website: 'http://spam.example' });
+    expect(r.status).toBe(202);
+    expect(outbox.length).toBe(antes);
+    expect((await dbQuery(`SELECT 1 FROM auth_tokens WHERE email='robo@exemplo.com'`)).rows).toHaveLength(0);
+  });
+
+  it('o limite por e-mail vale para variações do mesmo endereço (maiúsculas e espaços)', async () => {
+    const ip = newIp();
+    const variantes = ['varia@exemplo.com', ' VARIA@exemplo.com', 'Varia@Exemplo.com ', 'varia@exemplo.com'];
+    const codigos: number[] = [];
+    for (const email of variantes) {
+      codigos.push((await call('POST', '/api/auth/signup', { name: 'Vera Lima', email, password: STRONG, acceptTerms: true }, { ip })).status);
+    }
+    expect(codigos).toEqual([202, 202, 202, 429]);
+  });
+
+  it('esqueci minha senha leva o mesmo tempo exista ou não a conta', async () => {
+    await insertLegacy('usr_tempo', 'tempo@exemplo.com', 'TENANT', 'Senha-Tempo-2026');
+    const medir = async (email: string) => {
+      const t0 = Date.now();
+      const r = await call('POST', '/api/auth/forgot-password', { email });
+      return { ms: Date.now() - t0, body: JSON.stringify(r.body), status: r.status };
+    };
+    const existe = await medir('tempo@exemplo.com');
+    const naoExiste = await medir('ninguem-aqui@exemplo.com');
+    expect(existe.status).toBe(202);
+    expect(naoExiste.body).toBe(existe.body);
+    expect(existe.ms).toBeGreaterThanOrEqual(340);
+    expect(naoExiste.ms).toBeGreaterThanOrEqual(340);
+    expect(Math.abs(existe.ms - naoExiste.ms)).toBeLessThan(150);
+  });
+
+  it('falha do provedor de e-mail não derruba o cadastro nem revela se a conta existe', async () => {
+    setMailTransportForTests(async () => {
+      throw new Error('Falha no provedor de e-mail (HTTP 500).');
+    });
+    const linhas: string[] = [];
+    const orig = console.error;
+    console.error = (...a) => void linhas.push(a.join(' '));
+    try {
+      const r = await call('POST', '/api/auth/signup', { name: 'Falha Prov', email: 'falha-prov@exemplo.com', password: STRONG, acceptTerms: true });
+      expect(r.status).toBe(202);
+      await new Promise((res) => setTimeout(res, 50));
+      const saida = linhas.join('\n');
+      expect(saida).toContain('Envio falhou');
+      expect(saida).not.toContain('falha-prov@exemplo.com');
+    } finally {
+      console.error = orig;
+      setMailTransportForTests(async (m) => {
+        outbox.push(m);
+      });
+    }
+  });
+});
+
+describe('Interruptor do cadastro público (produção começa desligado)', () => {
+  it('desligado: cadastro recusado e nada criado, mas login, recuperação e usuários existentes seguem normais', async () => {
+    await insertLegacy('usr_flag', 'flag@exemplo.com', 'TENANT', 'Senha-Flag-2026');
+    const envAntes = { node: process.env.NODE_ENV, flag: process.env.PUBLIC_SIGNUP_ENABLED };
+    process.env.NODE_ENV = 'production';
+    delete process.env.PUBLIC_SIGNUP_ENABLED;
+    try {
+      expect((await call('GET', '/api/auth/config')).body).toEqual({ signupEnabled: false });
+      const antes = outbox.length;
+      const s = await call('POST', '/api/auth/signup', { name: 'Fechado', email: 'fechado@exemplo.com', password: STRONG, acceptTerms: true });
+      expect(s.status).toBe(403);
+      expect(s.body.code).toBe('SIGNUP_DISABLED');
+      expect((await call('POST', '/api/auth/register', { name: 'Fechado', email: 'fechado@exemplo.com', password: STRONG, acceptTerms: true })).status).toBe(403);
+      expect(outbox.length).toBe(antes);
+      expect((await dbQuery(`SELECT 1 FROM auth_tokens WHERE email='fechado@exemplo.com'`)).rows).toHaveLength(0);
+      // quem já existe continua entrando e recuperando a senha
+      expect((await call('POST', '/api/auth/login', { email: 'flag@exemplo.com', password: 'Senha-Flag-2026' })).status).toBe(200);
+      expect((await call('POST', '/api/auth/forgot-password', { email: 'flag@exemplo.com' })).status).toBe(202);
+
+      process.env.PUBLIC_SIGNUP_ENABLED = 'true';
+      expect((await call('GET', '/api/auth/config')).body).toEqual({ signupEnabled: true });
+    } finally {
+      if (envAntes.node === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = envAntes.node;
+      if (envAntes.flag === undefined) delete process.env.PUBLIC_SIGNUP_ENABLED;
+      else process.env.PUBLIC_SIGNUP_ENABLED = envAntes.flag;
+    }
   });
 });
 

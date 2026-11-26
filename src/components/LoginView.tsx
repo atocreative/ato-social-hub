@@ -18,8 +18,23 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigate
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [acceptTerms, setAcceptTerms] = useState(false);
+  const [trap, setTrap] = useState(''); // campo-isca: pessoas nunca o veem nem preenchem; robôs sim
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // O cadastro público pode estar desligado no servidor: nesse caso só o acesso por login aparece.
+  const [signupEnabled, setSignupEnabled] = useState(true);
+  useEffect(() => {
+    api
+      .getAuthConfig()
+      .then((c) => {
+        if (c && c.signupEnabled === false) {
+          setSignupEnabled(false);
+          setMode((m) => (m === 'signup' ? 'login' : m));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Mensagem de erro vinda de um redirecionamento (ex.: ig_error do retorno da Meta).
   useEffect(() => {
@@ -62,7 +77,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigate
     setErrorMessage(null);
     setLoading(true);
     try {
-      await api.signup({ name: name.trim(), email: email.trim(), password, acceptTerms });
+      await api.signup({ name: name.trim(), email: email.trim(), password, acceptTerms, website: trap });
       setPassword('');
       go('signup-sent');
     } catch (err: any) {
@@ -92,7 +107,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigate
     </button>
   );
 
-  const showTabs = mode === 'login' || mode === 'signup';
+  const showTabs = signupEnabled && (mode === 'login' || mode === 'signup');
 
   return (
     <AuthShell onNavigateLegal={onNavigateLegal}>
@@ -132,7 +147,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigate
                 {loading ? 'Entrando...' : 'Entrar'}
               </button>
             </form>
-            <p className="text-xs text-[#8E8E93] mt-5 text-center">Ainda não tem conta? {link('Criar minha conta', 'signup')}</p>
+            {signupEnabled && (
+              <p className="text-xs text-[#8E8E93] mt-5 text-center">Ainda não tem conta? {link('Criar minha conta', 'signup')}</p>
+            )}
           </>
         )}
 
@@ -142,6 +159,10 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigate
             <p className="text-sm text-[#8E8E93] mt-1 mb-5">Leva menos de um minuto. Depois você conecta seu Instagram profissional.</p>
             <AuthError message={errorMessage} />
             <form onSubmit={handleSignup} className="space-y-4">
+              <div aria-hidden="true" style={{ position: 'absolute', left: '-10000px', width: 1, height: 1, overflow: 'hidden' }}>
+                <label htmlFor="signup-website">Não preencha este campo</label>
+                <input id="signup-website" name="website" type="text" tabIndex={-1} autoComplete="off" value={trap} onChange={(e) => setTrap(e.target.value)} />
+              </div>
               <div>
                 <label className="block text-xs text-[#8E8E93] mb-1.5" htmlFor="signup-name">Nome completo</label>
                 <input id="signup-name" type="text" required minLength={2} maxLength={120} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Maria Souza" className={authInputClass} />

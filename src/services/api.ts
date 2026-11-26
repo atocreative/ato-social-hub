@@ -101,8 +101,10 @@ export const api = {
     });
   },
 
+  getAuthConfig: async (): Promise<{ signupEnabled: boolean }> => apiFetch('/api/auth/config', { method: 'GET' }),
+
   // Cadastro público: envia o e-mail de confirmação (a conta só é criada depois do clique no link).
-  signup: async (data: { name: string; email: string; password: string; acceptTerms: boolean }): Promise<{ success: boolean; message: string }> =>
+  signup: async (data: { name: string; email: string; password: string; acceptTerms: boolean; website?: string }): Promise<{ success: boolean; message: string }> =>
     apiFetch('/api/auth/signup', { method: 'POST', body: JSON.stringify(data) }),
 
   verifyEmail: async (code: string): Promise<AuthResponse> =>

@@ -2,6 +2,7 @@ import { Router, type Request, type Response, type NextFunction } from 'express'
 import type { UserProfile } from '../types/index.ts';
 import {
   AccountError,
+  normalizeEmail,
   acceptInvite,
   createInvite,
   createWorkspace,
@@ -42,6 +43,22 @@ function fail(res: Response, err: unknown) {
   return res.status(500).json({ error: 'Não foi possível concluir a operação. Tente novamente.', code: 'INTERNAL' });
 }
 
+/**
+ * Interruptor do cadastro público. Em produção fica DESLIGADO até PUBLIC_SIGNUP_ENABLED=true, para que o envio
+ * de e-mails seja validado antes de abrir. Login, recuperação de senha e convites não dependem dele.
+ */
+export function publicSignupEnabled(): boolean {
+  if (process.env.NODE_ENV === 'production') return process.env.PUBLIC_SIGNUP_ENABLED === 'true';
+  return process.env.PUBLIC_SIGNUP_ENABLED !== 'false';
+}
+
+// Piso de tempo nas respostas públicas: exista ou não conta, a resposta leva o mesmo tempo (sem enumeração por latência).
+const PUBLIC_FLOW_MIN_MS = 350;
+async function atLeast(startedAt: number) {
+  const rest = PUBLIC_FLOW_MIN_MS - (Date.now() - startedAt);
+  if (rest > 0) await new Promise((r) => setTimeout(r, rest));
+}
+
 // Mensagem única, igual exista ou não conta com o e-mail (sem enumeração).
 const SIGNUP_ACCEPTED = 'Enviamos um e-mail de confirmação. Abra a mensagem e clique no link para ativar sua conta.';
 const RESET_ACCEPTED = 'Se existir uma conta com este e-mail, enviaremos as instruções para criar uma nova senha.';
@@ -50,17 +67,33 @@ export function createAccountRouter(deps: AccountRouterDeps): Router {
   const r = Router();
 
   const signup = async (req: Request, res: Response) => {
+    const startedAt = Date.now();
     try {
+      if (!publicSignupEnabled()) {
+        return res.status(403).json({ error: 'O cadastro de novas contas ainda não está disponível.', code: 'SIGNUP_DISABLED' });
+      }
       if (!mailConfigured()) throw new MailNotConfiguredError();
-      const email = String(req.body?.email ?? '');
+      const email = normalizeEmail(req.body?.email);
       if (!(await limit(res, `signup:ip:${ip(req)}`, 10, 3600))) return;
       if (!(await limit(res, `signup:email:${hashForBucket(email)}`, 3, 3600))) return;
+      if (!(await limit(res, 'signup:global', 300, 3600))) return; // protege a reputação do remetente contra campanhas distribuídas
+      // Campo-isca invisível ao usuário: robôs que preenchem todos os campos recebem a mesma resposta, sem efeito algum.
+      if (String(req.body?.website ?? '').trim() !== '') {
+        await atLeast(startedAt);
+        return res.status(202).json({ success: true, message: SIGNUP_ACCEPTED });
+      }
       await requestSignup(req.body || {});
+      await atLeast(startedAt);
       return res.status(202).json({ success: true, message: SIGNUP_ACCEPTED });
     } catch (err) {
       return fail(res, err);
     }
   };
+  // Informação pública e não sensível: a tela de acesso só mostra "Criar conta" quando o cadastro está aberto.
+  r.get('/auth/config', (_req: Request, res: Response) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ signupEnabled: publicSignupEnabled() });
+  });
   r.post('/auth/signup', signup);
   r.post('/auth/register', signup); // caminho antigo agora usa o mesmo fluxo seguro (sem sessão imediata)
 
@@ -77,12 +110,15 @@ export function createAccountRouter(deps: AccountRouterDeps): Router {
   });
 
   r.post('/auth/forgot-password', async (req: Request, res: Response) => {
+    const startedAt = Date.now();
     try {
       if (!mailConfigured()) throw new MailNotConfiguredError();
-      const email = String(req.body?.email ?? '');
+      const email = normalizeEmail(req.body?.email);
       if (!(await limit(res, `forgot:ip:${ip(req)}`, 10, 3600))) return;
       if (!(await limit(res, `forgot:email:${hashForBucket(email)}`, 3, 3600))) return;
+      if (!(await limit(res, 'forgot:global', 300, 3600))) return;
       await requestPasswordReset(email);
+      await atLeast(startedAt);
       return res.status(202).json({ success: true, message: RESET_ACCEPTED });
     } catch (err) {
       return fail(res, err);

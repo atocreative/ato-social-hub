@@ -7,7 +7,11 @@ export interface MailMessage {
   text: string;
   html: string;
 }
-export type MailTransport = (msg: MailMessage) => Promise<void>;
+export interface MailSendResult {
+  /** Identificador devolvido pelo provedor (serve para consultar a entrega; não é segredo). */
+  id?: string;
+}
+export type MailTransport = (msg: MailMessage) => Promise<void | MailSendResult>;
 
 export class MailNotConfiguredError extends Error {
   constructor() {
@@ -31,11 +35,13 @@ export function appBaseUrl(): string {
   return String(process.env.APP_URL || process.env.APP_BASE_URL || '').trim().replace(/\/+$/, '');
 }
 
-export async function sendMail(msg: MailMessage): Promise<void> {
-  if (testTransport) return testTransport(msg);
+const RESEND_TIMEOUT_MS = 10_000;
+
+export async function sendMail(msg: MailMessage): Promise<MailSendResult> {
+  if (testTransport) return (await testTransport(msg)) || {};
   if (process.env.MAIL_PROVIDER === 'console' && process.env.NODE_ENV !== 'production') {
     console.log(`[Mail:console] Para ${msg.to} — ${msg.subject}\n${msg.text}`);
-    return;
+    return {};
   }
   const key = process.env.RESEND_API_KEY;
   const from = process.env.MAIL_FROM;
@@ -44,11 +50,38 @@ export async function sendMail(msg: MailMessage): Promise<void> {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ from, to: [msg.to], subject: msg.subject, text: msg.text, html: msg.html }),
+    signal: AbortSignal.timeout(RESEND_TIMEOUT_MS),
+  }).catch((err: any) => {
+    // Nunca registra chave, destinatário nem corpo.
+    throw new Error(err?.name === 'TimeoutError' ? 'Falha no provedor de e-mail (tempo esgotado).' : 'Falha no provedor de e-mail (rede).');
   });
   if (!res.ok) {
     // Nunca registra corpo, destinatário nem chave: só o status.
     throw new Error(`Falha no provedor de e-mail (HTTP ${res.status}).`);
   }
+  const data: any = await res.json().catch(() => ({}));
+  return { id: typeof data?.id === 'string' ? data.id : undefined };
+}
+
+/**
+ * Envio sem aguardar o provedor. Usado nos fluxos públicos em que o tempo de resposta não pode
+ * revelar se o e-mail tem conta. Falhas são registradas só com a causa (status), sem endereço, token ou link.
+ */
+export function sendMailBackground(msg: MailMessage): void {
+  sendMail(msg).catch((err: any) => console.error('[Mail] Envio falhou:', String(err?.message || 'erro desconhecido')));
+}
+
+/** Situação de entrega informada pelo provedor (delivered, bounced, complained, delivery_delayed...). */
+export async function getMailDeliveryEvent(id: string): Promise<string | null> {
+  const key = process.env.RESEND_API_KEY;
+  if (!key || !id) return null;
+  const res = await fetch(`https://api.resend.com/emails/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${key}` },
+    signal: AbortSignal.timeout(RESEND_TIMEOUT_MS),
+  }).catch(() => null);
+  if (!res || !res.ok) return null;
+  const data: any = await res.json().catch(() => ({}));
+  return typeof data?.last_event === 'string' ? data.last_event : null;
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string));
