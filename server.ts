@@ -1791,6 +1791,8 @@ app.post('/api/account/delete', requireAuth, async (req: AuthenticatedRequest, r
   );
   const tenantId = tenant?.id || user.tenantId || '';
 
+  // .data/ não é mais versionado: em um deploy novo a pasta não existe.
+  fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.appendFileSync(
     path.join(__dirname, '.data', 'account-deletions.log'),
     buildDeletionAuditEntry({
