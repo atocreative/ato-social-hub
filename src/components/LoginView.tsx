@@ -23,17 +23,21 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigate
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // O cadastro público pode estar desligado no servidor: nesse caso só o acesso por login aparece.
-  const [signupEnabled, setSignupEnabled] = useState(true);
+  // `null` = ainda consultando: as abas só aparecem depois da resposta, para não "piscar" e sumir.
+  const [signupEnabled, setSignupEnabled] = useState<boolean | null>(null);
   useEffect(() => {
     api
       .getAuthConfig()
       .then((c) => {
-        if (c && c.signupEnabled === false) {
-          setSignupEnabled(false);
-          setMode((m) => (m === 'signup' ? 'login' : m));
-        }
+        const on = Boolean(c && c.signupEnabled === true);
+        setSignupEnabled(on);
+        if (!on) setMode((m) => (m === 'signup' ? 'login' : m));
       })
-      .catch(() => {});
+      .catch(() => {
+        // Servidor sem a rota (versão antiga) ou indisponível: não oferece cadastro.
+        setSignupEnabled(false);
+        setMode((m) => (m === 'signup' ? 'login' : m));
+      });
   }, []);
 
   // Mensagem de erro vinda de um redirecionamento (ex.: ig_error do retorno da Meta).

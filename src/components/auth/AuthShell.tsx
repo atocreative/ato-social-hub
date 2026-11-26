@@ -1,4 +1,5 @@
 import React from 'react';
+import { Check } from 'lucide-react';
 import { BrandLogo } from '../BrandLogo.tsx';
 
 // Órbitas (tamanho em px, duração em s, tamanho do planeta, cor, sentido, posição inicial em graus).
@@ -63,7 +64,6 @@ export const AuthShell: React.FC<{ children: React.ReactNode; onNavigateLegal?: 
             style={{ left: `${s.x}%`, top: `${s.y}%`, width: s.r, height: s.r, opacity: s.o, animationDelay: `${s.d}s` }}
           />
         ))}
-        <BrandLogo variant="dot" height={36} />
         <div className="relative flex-1 flex items-center justify-center min-h-[240px]">
           {RINGS.map((r) => (
             <div
@@ -100,7 +100,6 @@ export const AuthShell: React.FC<{ children: React.ReactNode; onNavigateLegal?: 
           />
         </div>
         <div className="relative">
-          <p className="text-xs tracking-[0.3em] text-[#8E8E93] uppercase mb-4">Gestão de redes sociais</p>
           <h1 className="text-4xl font-bold leading-tight">
             Seus posts <span className="text-[#10B981]">programados</span>, no lugar certo.
           </h1>
@@ -108,10 +107,15 @@ export const AuthShell: React.FC<{ children: React.ReactNode; onNavigateLegal?: 
             Organize, aprove e agende as publicações da sua conta profissional do Instagram em um só lugar.
           </p>
         </div>
-        <ul className="relative mt-8 space-y-3 text-sm text-[#8E8E93]">
-          <li>• Seu espaço de trabalho é privado: só você e quem você convidar têm acesso</li>
-          <li>• Nada é publicado sem a sua confirmação</li>
-          <li>• Conexão oficial com o Instagram, sem pedir a senha dele</li>
+        <ul className="relative mt-8 space-y-2.5 text-sm text-[#B4B4B9]">
+          {['Espaço de trabalho privado', 'Nada é publicado sem a sua confirmação', 'Conexão oficial com o Instagram, sem pedir a senha'].map((t) => (
+            <li key={t} className="flex items-center gap-3">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#10B981]/15 text-[#10B981]">
+                <Check size={12} strokeWidth={3} />
+              </span>
+              {t}
+            </li>
+          ))}
         </ul>
       </aside>
 
