@@ -16,6 +16,7 @@ import { dbQuery } from '../db/pool.ts';
 import { setInstagramFetchOverride } from '../services/instagramCore.ts';
 import { upsertInstagramAccount, getInstagramAccountByIdOrUser, upsertPostGroupToDb } from '../db/repository.ts';
 import { TokenService } from '../services/TokenService.ts';
+import { setMailTransportForTests, type MailMessage } from '../services/mailer.ts';
 
 type FakeGraph = {
   accounts: Array<{ id: string; username: string; account_type?: string }>;
@@ -484,44 +485,92 @@ describe('Unified Login — segurança de autenticação, vínculo por ID e isol
   // Jornada completa: cadastro -> aprovação -> login (e-mail/senha) -> conexão do Instagram
   // ------------------------------------------------------------------
   describe('Jornada do cliente: autenticação no Social Hub separada da autorização do Instagram', () => {
-    it('cadastro e login por e-mail/senha; a conexão do Instagram só ocorre depois, na empresa do próprio usuário', async () => {
+    it('cadastro com e-mail confirmado e espaço de trabalho; a conexão do Instagram só ocorre depois, na empresa do próprio usuário', async () => {
+      // O antigo /api/auth/register criava sessão sem confirmar o e-mail e dependia de aprovação manual.
+      // O cadastro público agora confirma o e-mail e cria o espaço de trabalho; o que o teste garante continua igual:
+      // autenticar no Social Hub é uma etapa e autorizar o Instagram é outra, sempre dentro da empresa do usuário.
       resetGraph();
       const suffix = Date.now();
       const email = `cliente.${suffix}@empresa.com.br`;
-      const reg = await req('/api/auth/register', {
-        method: 'POST',
-        body: { name: 'Marina Costa', companyName: `Clinica ${suffix}`, email, password: 'senhaSegura123' },
+      const mails: MailMessage[] = [];
+      setMailTransportForTests(async (m) => void mails.push(m));
+      try {
+        const reg = await req('/api/auth/signup', {
+          method: 'POST',
+          body: { name: 'Marina Costa', email, password: 'Senha-Segura-123', acceptTerms: true },
+        });
+        expect(reg.status).toBe(202);
+        expect(reg.body.token).toBeUndefined();
+        const link = mails.find((m) => m.to === email)!.text.match(/https?:\/\/\S+/)![0];
+        const verified = await req('/api/auth/verify-email', { method: 'POST', body: { token: new URL(link).searchParams.get('code') } });
+        expect(verified.status).toBe(200);
+        const ws = await req('/api/workspaces', { method: 'POST', token: verified.body.token, body: { companyName: `Clinica ${suffix}` } });
+        expect(ws.status).toBe(201);
+        expect(ws.body.user.connectionStatus).toBe('DESCONECTADO');
+        const tenantId = ws.body.user.tenantId;
+
+        // Login por e-mail e senha (senha errada é recusada).
+        const bad = await req('/api/auth/login', { method: 'POST', body: { email, password: 'senhaErrada' } });
+        expect(bad.status).toBe(401);
+        const login = await req('/api/auth/login', { method: 'POST', body: { email, password: 'Senha-Segura-123' } });
+        expect(login.status).toBe(200);
+        expect(login.body.user.tenantId).toBe(tenantId);
+
+        // Só agora autoriza o Instagram, com a sessão do Social Hub.
+        const { state, cookie } = await startFlow(login.body.token);
+        const cb = await callback(state, cookie);
+        expect(cb.status).toBe(200);
+        expect(cb.body.token).toBeUndefined();
+        const acc = await getInstagramAccountByIdOrUser(tenantId);
+        expect(acc?.connectionStatus).toBe('CONECTADO');
+        expect(acc?.companyId).toBe(ws.body.user.companyId);
+        expect(acc?.instagramUserId).toBe(graph.accounts[0].id);
+      } finally {
+        setMailTransportForTests(null);
+      }
+    }, 30000);
+
+    it('espaço de trabalho sem Instagram: pode revisar e aprovar, mas agendar e publicar são bloqueados no servidor', async () => {
+      resetGraph();
+      await seedTenant('tenant_sem_ig', { driveFolderName: 'Sem IG', username: 'cadastro_sem_ig', instagramUserId: 'pending_ig_sem_ig' });
+      const mk = (id: string) => ({
+        id, nome: id, loteNome: `lote_${id}`, categoria: 'Post Único' as const, status: 'PENDENTE' as const,
+        tenantId: 'tenant_sem_ig', driveFolderName: 'Sem IG', pastaClienteNome: 'Sem IG', pastaClienteId: 'folder_sem_ig',
+        caption: 'legenda', dataCriacao: new Date().toISOString(),
+        items: [{ driveFileId: `file_${id}`, nome: '01.jpg', categoria: 'Post Único' as const, loteNome: `lote_${id}`, viewUrl: 'https://cdn.exemplo.test/a.jpg', thumbnailUrl: 'https://cdn.exemplo.test/a.jpg', dataCriacao: new Date().toISOString(), status: 'PENDENTE' as const, tenantId: 'tenant_sem_ig', driveFolderName: 'Sem IG', pastaClienteNome: 'Sem IG', pastaClienteId: 'folder_sem_ig' }],
       });
-      expect(reg.status).toBe(201);
-      expect(reg.body.user.role).toBe('TENANT');
-      expect(reg.body.user.connectionStatus).toBe('DESCONECTADO');
-      const tenantId = reg.body.tenant.id;
+      await upsertPostGroupToDb(mk('post_sem_ig') as any);
+      await syncStateFromPostgres(true);
+      const token = tenantUser('tenant_sem_ig');
+      const future = new Date(Date.now() + 86400000).toISOString();
 
-      // Admin aprova e vincula a pasta da empresa.
-      const approve = await req(`/api/admin/tenants/${encodeURIComponent(tenantId)}/approve`, {
-        method: 'POST',
-        token: adminUser(),
-        body: { driveFolderName: `Clinica_${suffix}` },
+      expect((await req('/api/posts/post_sem_ig/publish', { method: 'POST', token, body: { action: 'APPROVE', caption: 'ok' } })).status).toBe(200);
+      const now = await req('/api/posts/post_sem_ig/publish', { method: 'POST', token, body: { action: 'NOW', caption: 'ok' } });
+      expect(now.status).toBe(409);
+      expect(now.body.code).toBe('INSTAGRAM_NOT_CONNECTED');
+      const sched = await req('/api/posts/post_sem_ig/publish', { method: 'POST', token, body: { action: 'SCHEDULE', scheduledAt: future } });
+      expect(sched.status).toBe(409);
+      const direct = await req('/api/instagram/publish', { method: 'POST', token, body: { id: 'post_sem_ig', caption: 'x' } });
+      expect(direct.status).toBe(409);
+      expect(direct.body.code).toBe('INSTAGRAM_NOT_CONNECTED');
+      expect(graphCalls.some((u) => u.includes('/media'))).toBe(false);
+    }, 30000);
+
+    it('reconexão: conta com autorização expirada volta a CONECTADO pelo mesmo fluxo e continua vinculada à mesma empresa', async () => {
+      resetGraph();
+      await seedTenant('tenant_reconecta', {
+        driveFolderName: 'Reconecta', username: 'conta_real', instagramUserId: graph.accounts[0].id,
+        connectionStatus: 'RECONEXAO_NECESSARIA', status: 'RECONEXAO_NECESSARIA',
       });
-      expect(approve.status).toBe(200);
-      expect(approve.body.tenant.hasValidToken).toBe(false);
-
-      // Login por e-mail e senha (senha errada é recusada).
-      const bad = await req('/api/auth/login', { method: 'POST', body: { email, password: 'senhaErrada' } });
-      expect(bad.status).toBe(401);
-      const login = await req('/api/auth/login', { method: 'POST', body: { email, password: 'senhaSegura123' } });
-      expect(login.status).toBe(200);
-      expect(login.body.user.tenantId).toBe(tenantId);
-
-      // Só agora autoriza o Instagram, com a sessão do Social Hub.
-      const { state, cookie } = await startFlow(login.body.token);
+      const token = tenantUser('tenant_reconecta');
+      const { state, cookie } = await startFlow(token);
       const cb = await callback(state, cookie);
       expect(cb.status).toBe(200);
       expect(cb.body.token).toBeUndefined();
-      const acc = await getInstagramAccountByIdOrUser(tenantId);
+      const acc = await getInstagramAccountByIdOrUser('tenant_reconecta');
       expect(acc?.connectionStatus).toBe('CONECTADO');
-      expect(acc?.driveFolderName).toBe(`Clinica_${suffix}`);
-      expect(acc?.instagramUserId).toBe(graph.accounts[0].id);
+      expect(acc?.id).toBe('tenant_reconecta');
+      expect(acc?.driveFolderName).toBe('Reconecta');
     }, 30000);
 
     it('o callback nunca gera sessão: nem JWT, nem cookie de sessão, nem HTML com token', async () => {

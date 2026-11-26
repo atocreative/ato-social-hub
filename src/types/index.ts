@@ -287,6 +287,11 @@ export interface UserProfile {
   tokenExpiresAt?: string;
   grantedScopes?: string[];
   connectionStatus?: ConnectionStatus;
+  /** OWNER = criou o espaço de trabalho; MEMBER = convidado. Ausente em usuários anteriores ao cadastro público. Nunca é administrador global. */
+  workspaceRole?: 'OWNER' | 'MEMBER';
+  emailVerified?: boolean;
+  /** Cadastro confirmado, mas ainda sem espaço de trabalho. */
+  needsWorkspace?: boolean;
 }
 
 export interface AuthResponse {

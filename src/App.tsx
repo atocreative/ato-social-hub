@@ -3,6 +3,8 @@ import { api, authStorage } from './services/api.ts';
 import { PostGroup, UserProfile, InstagramPublishPayload, TenantAccount, RejectionFeedbackInput } from './types/index.ts';
 import { filterPosts, CategoryFilter, MediaFilter, formatDateTimeBR } from './utils/postHelpers.ts';
 import { LoginView } from './components/LoginView.tsx';
+import { AuthLinkPage, resolveAuthLinkRoute } from './components/auth/AuthLinkPages.tsx';
+import { OnboardingView } from './components/auth/OnboardingView.tsx';
 import { Header } from './components/Header.tsx';
 import { AdminTenantsView } from './components/AdminTenantsView.tsx';
 import { FilterBar, FilterTab } from './components/FilterBar.tsx';
@@ -50,6 +52,8 @@ export default function App() {
   // Visão da área do usuário (TENANT): dashboard, posts, agenda, memória e conta
   const [userView, setUserView] = useState<UserView>('dashboard');
   const [previewTenant, setPreviewTenant] = useState<TenantAccount | null>(null);
+  // Etapa guiada logo após criar o espaço de trabalho: conectar o Instagram agora ou depois.
+  const [onboardingStep, setOnboardingStep] = useState<'connect' | null>(null);
 
   // Selected Company Context in "Mídias Sincronizadas" ('ALL' = Visão Global Admin, or company name e.g. "Ato")
   const [selectedCompany, setSelectedCompany] = useState<string>('ALL');
@@ -201,6 +205,7 @@ export default function App() {
           if (meRes.user) {
             authStorage.setSession(meRes.token || authStorage.getToken()!, meRes.user);
             setUser(meRes.user);
+            setOnboardingStep(null);
           }
           await loadPosts();
           const connectedUsername =
@@ -262,6 +267,7 @@ export default function App() {
     authStorage.clearSession();
     setUser(null);
     setPreviewTenant(null);
+    setOnboardingStep(null);
     setSelectedCompany('ALL');
     setPosts([]);
   };
@@ -504,9 +510,49 @@ export default function App() {
     return <PublicLegalPage route={legalRoute} onNavigate={navigateTo} />;
   }
 
-  // If not authenticated, show single centered card Login
+  // Links enviados por e-mail: confirmar e-mail, redefinir senha e aceitar convite.
+  const authLinkRoute = resolveAuthLinkRoute(currentPath);
+  if (authLinkRoute) {
+    return (
+      <AuthLinkPage
+        route={authLinkRoute}
+        onNavigate={navigateTo}
+        onAuthenticated={(u) => {
+          setUser(u);
+          setPreviewTenant(null);
+          setOnboardingStep(null);
+        }}
+      />
+    );
+  }
+
+  // If not authenticated, show Entrar / Criar conta
   if (!user) {
-    return <LoginView onLoginSuccess={handleLoginSuccess} onNavigateLegal={navigateTo} />;
+    return (
+      <LoginView
+        onLoginSuccess={handleLoginSuccess}
+        onNavigateLegal={navigateTo}
+        initialMode={currentPath.replace(/\/+$/, '') === '/cadastro' ? 'signup' : 'login'}
+      />
+    );
+  }
+
+  // Cadastro confirmado, ainda sem espaço de trabalho; e a etapa opcional de conectar o Instagram.
+  if (user.role === 'TENANT' && (user.needsWorkspace || onboardingStep === 'connect')) {
+    return (
+      <OnboardingView
+        step={user.needsWorkspace ? 'workspace' : 'connect'}
+        user={user}
+        onNavigateLegal={navigateTo}
+        onLogout={handleLogout}
+        onSkip={() => setOnboardingStep(null)}
+        onWorkspaceCreated={(res) => {
+          authStorage.setSession(res.token, res.user);
+          setUser(res.user);
+          setOnboardingStep('connect');
+        }}
+      />
+    );
   }
 
   const effectiveTenantFolderName =

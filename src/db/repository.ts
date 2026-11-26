@@ -196,8 +196,10 @@ export async function authenticateSocialHubUser(
     status: TenantStatus;
     company_id: string | null;
     instagram_account_id: string | null;
+    workspace_role: 'OWNER' | 'MEMBER' | null;
+    email_verified_at: string | Date | null;
   }>(
-    'SELECT id, email, name, password_hash, role, status, company_id, instagram_account_id FROM users WHERE LOWER(email) = $1 LIMIT 1',
+    'SELECT id, email, name, password_hash, role, status, company_id, instagram_account_id, workspace_role, email_verified_at FROM users WHERE LOWER(email) = $1 LIMIT 1',
     [cleanEmail]
   );
 
@@ -250,6 +252,9 @@ export async function authenticateSocialHubUser(
     tokenIssuedAt: tenant?.tokenIssuedAt,
     tokenExpiresAt: tenant?.tokenExpiresAt,
     grantedScopes: tenant?.grantedScopes || [],
+    workspaceRole: row.workspace_role || undefined,
+    emailVerified: Boolean(row.email_verified_at) || undefined,
+    needsWorkspace: !row.company_id && !row.instagram_account_id,
   };
 
   return {

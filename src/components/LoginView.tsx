@@ -1,68 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api, authStorage } from '../services/api.ts';
 import { AuthResponse } from '../types/index.ts';
-import { BrandLogo } from './BrandLogo.tsx';
+import { AuthShell, AuthError, AuthNotice, authCardClass, authInputClass, authPrimaryButton } from './auth/AuthShell.tsx';
+import { PasswordField } from './auth/PasswordField.tsx';
 
 interface LoginViewProps {
   onLoginSuccess: (user: AuthResponse['user']) => void;
   onNavigateLegal?: (path: string) => void;
+  initialMode?: 'login' | 'signup';
 }
 
-export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigateLegal }) => {
-  // Acesso administrativo (e-mail e senha)
+type Mode = 'login' | 'signup' | 'forgot' | 'signup-sent' | 'forgot-sent';
+
+export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigateLegal, initialMode = 'login' }) => {
+  const [mode, setMode] = useState<Mode>(initialMode);
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [rememberMe, setRememberMe] = useState(true);
-
+  const [acceptTerms, setAcceptTerms] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [oauthLoading, setOauthLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Retorno do popup OAuth do Instagram
-  useEffect(() => {
-    const handleOAuthMessage = async (event: MessageEvent) => {
-      if (!event.data) return;
-
-      if (event.data.type === 'INSTAGRAM_AUTH_ERROR') {
-        setOauthLoading(false);
-        setErrorMessage(
-          event.data.message || 'Não foi possível concluir a conexão. Tente novamente.'
-        );
-        return;
-      }
-
-      if (event.data.type === 'INSTAGRAM_AUTH_SUCCESS') {
-        const { token: messageToken, user, tenant, syncTicket } = event.data;
-        // O callback NÃO envia o token na mensagem: a popup grava a sessão no localStorage
-        // do mesmo domínio. Lemos esse valor ANTES de limpar o storage.
-        let token: string | null = messageToken || null;
-        if (!token) {
-          try {
-            token = localStorage.getItem('ato_social_jwt_token');
-          } catch {
-            token = null;
-          }
-        }
-        if (token && user) {
-          localStorage.clear();
-          sessionStorage.clear();
-          authStorage.clearSession();
-          authStorage.setSession(token, user);
-          try {
-            await api.syncInstagramSession({ user, tenant, syncTicket });
-          } catch {
-            // Ignora falha transitória de sincronização
-          }
-          onLoginSuccess(user);
-        }
-      }
-    };
-
-    window.addEventListener('message', handleOAuthMessage);
-    return () => window.removeEventListener('message', handleOAuthMessage);
-  }, [onLoginSuccess]);
-
-  // Erro vindo de redirect (ig_error) ou token na URL
+  // Mensagem de erro vinda de um redirecionamento (ex.: ig_error do retorno da Meta).
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const igError = params.get('ig_error');
@@ -70,185 +29,192 @@ export const LoginView: React.FC<LoginViewProps> = ({ onLoginSuccess, onNavigate
       setErrorMessage(igError);
       window.history.replaceState({}, document.title, window.location.pathname);
     }
+  }, []);
 
-    const urlToken = params.get('token');
-    if (urlToken) {
-      localStorage.clear();
-      sessionStorage.clear();
-      authStorage.clearSession();
-      localStorage.setItem('ato_social_jwt_token', urlToken);
-      api
-        .getMe()
-        .then((res) => {
-          if (res.user) {
-            authStorage.setSession(res.token || urlToken, res.user);
-            window.history.replaceState({}, document.title, window.location.pathname);
-            onLoginSuccess(res.user);
-          }
-        })
-        .catch(() => {
-          authStorage.clearSession();
-        });
-    }
-  }, [onLoginSuccess]);
+  const go = (next: Mode) => {
+    setMode(next);
+    setErrorMessage(null);
+  };
 
-  // Acesso administrativo
-  const handleSubmitLogin = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage(null);
     setLoading(true);
     localStorage.clear();
     sessionStorage.clear();
     authStorage.clearSession();
-
     try {
       const data = await api.login(email.trim(), password);
       if (!data || !data.user || !data.user.role) {
-        throw new Error(
-          (data as any)?.error ||
-            'Resposta inválida do servidor ao realizar login. Tente novamente.'
-        );
+        throw new Error((data as any)?.error || 'Resposta inválida do servidor. Tente novamente.');
       }
       authStorage.setSession(data.token, data.user);
       onLoginSuccess(data.user);
     } catch (err: any) {
-      setErrorMessage(
-        err.message || 'Credenciais inválidas. Verifique o e-mail e a senha informados.'
-      );
+      setErrorMessage(err.message || 'E-mail ou senha incorretos. Confira os dados e tente novamente.');
     } finally {
       setLoading(false);
     }
   };
 
-  const legalLink = (path: string, label: string) => (
-    <a
-      href={path}
-      onClick={(e) => {
-        if (onNavigateLegal) {
-          e.preventDefault();
-          onNavigateLegal(path);
-        }
-      }}
-      className="hover:text-[#10B981] transition-colors underline-offset-4 hover:underline"
-    >
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setLoading(true);
+    try {
+      await api.signup({ name: name.trim(), email: email.trim(), password, acceptTerms });
+      setPassword('');
+      go('signup-sent');
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Não foi possível criar a conta agora. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgot = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMessage(null);
+    setLoading(true);
+    try {
+      await api.forgotPassword(email.trim());
+      go('forgot-sent');
+    } catch (err: any) {
+      setErrorMessage(err.message || 'Não foi possível enviar as instruções agora. Tente novamente.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const link = (label: string, next: Mode) => (
+    <button type="button" onClick={() => go(next)} className="text-[#10B981] hover:underline underline-offset-4 cursor-pointer">
       {label}
-    </a>
+    </button>
   );
 
+  const showTabs = mode === 'login' || mode === 'signup';
+
   return (
-    <div className="min-h-screen bg-[#0A0A0A] text-white font-sans md:grid md:grid-cols-2">
-      {/* Coluna da marca (somente desktop) */}
-      <aside className="hidden md:flex flex-col justify-between p-12 border-r border-[#1C1C1C] bg-[#0A0A0A]">
-        <BrandLogo variant="dot" height={36} />
-        <div>
-          <p className="text-xs tracking-[0.3em] text-[#8E8E93] uppercase mb-4">
-            Gestão de redes sociais
-          </p>
-          <h1 className="text-4xl font-bold leading-tight">
-            Seus posts <span className="text-[#10B981]">programados</span>, no lugar certo.
-          </h1>
-          <p className="mt-4 text-[#8E8E93] max-w-md">
-            Organize, agende e acompanhe as publicações da sua conta profissional do Instagram.
-          </p>
-        </div>
-        <ul className="space-y-3 text-sm text-[#8E8E93]">
-          <li>• Agenda visual dos posts programados</li>
-          <li>• Status de publicação em tempo real</li>
-          <li>• Memória criativa para as próximas artes</li>
-        </ul>
-      </aside>
-
-      {/* Card de acesso */}
-      <main className="flex flex-col items-center justify-center p-6 md:p-12 min-h-screen md:min-h-0">
-        <div className="w-full max-w-[380px]">
-          <div className="md:hidden flex justify-center mb-8">
-            <BrandLogo variant="dot" height={36} />
+    <AuthShell onNavigateLegal={onNavigateLegal}>
+      <div className={authCardClass}>
+        {showTabs && (
+          <div role="tablist" aria-label="Acesso" className="grid grid-cols-2 gap-1 p-1 mb-6 bg-[#0A0A0A] border border-[#242424] rounded-xl">
+            {(['login', 'signup'] as const).map((m) => (
+              <button
+                key={m}
+                role="tab"
+                type="button"
+                aria-selected={mode === m}
+                onClick={() => go(m)}
+                className={`py-2 text-sm rounded-lg font-medium cursor-pointer transition-colors ${
+                  mode === m ? 'bg-[#1C1C1C] text-white' : 'text-[#8E8E93] hover:text-white'
+                }`}
+              >
+                {m === 'login' ? 'Entrar' : 'Criar conta'}
+              </button>
+            ))}
           </div>
+        )}
 
-          <div className="bg-[#121212] border border-[#242424] rounded-2xl p-7 shadow-xl">
-            <h2 className="text-xl font-semibold">Entrar</h2>
-            <p className="text-sm text-[#8E8E93] mt-1 mb-4">
-              Entre com o e-mail e a senha do seu cadastro no ATO Social Hub.
-            </p>
-            <ol className="mb-6 space-y-1.5 text-xs text-[#8E8E93] leading-relaxed list-decimal pl-4">
-              <li>Entre no ATO Social Hub com seu e-mail e senha.</li>
-              <li>
-                No painel, em <strong className="text-white">Conta</strong>, conecte sua conta
-                profissional do Instagram.
-              </li>
-              <li>Revise cada post e publique somente o que você aprovar.</li>
-            </ol>
-
-            {errorMessage && (
-              <div className="mb-5 p-3 bg-red-950/30 border border-[#EF4444]/40 rounded-lg text-[#EF4444] text-xs leading-relaxed">
-                {errorMessage}
+        {mode === 'login' && (
+          <>
+            <h2 className="text-xl font-semibold">Bem-vindo de volta</h2>
+            <p className="text-sm text-[#8E8E93] mt-1 mb-5">Entre para acompanhar e aprovar suas publicações.</p>
+            <AuthError message={errorMessage} />
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div>
+                <label className="block text-xs text-[#8E8E93] mb-1.5" htmlFor="login-email">E-mail</label>
+                <input id="login-email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="seu@email.com" className={authInputClass} />
               </div>
-            )}
+              <PasswordField id="login-password" label="Senha" value={password} onChange={setPassword} autoComplete="current-password" />
+              <div className="flex justify-end -mt-1 text-xs">{link('Esqueci minha senha', 'forgot')}</div>
+              <button type="submit" disabled={loading} className={authPrimaryButton}>
+                {loading ? 'Entrando...' : 'Entrar'}
+              </button>
+            </form>
+            <p className="text-xs text-[#8E8E93] mt-5 text-center">Ainda não tem conta? {link('Criar minha conta', 'signup')}</p>
+          </>
+        )}
 
-            <div>
-              <form onSubmit={handleSubmitLogin} className="space-y-4">
-                <div>
-                  <label className="block text-xs text-[#8E8E93] mb-1.5" htmlFor="login-email">
-                    E-mail
-                  </label>
-                  <input
-                    id="login-email"
-                    type="email"
-                    required
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="seu@email.com"
-                    className="w-full bg-[#0A0A0A] border border-[#242424] focus:border-[#10B981] rounded-lg px-3 py-2 text-sm text-white placeholder-[#4E4E52] outline-none"
-                  />
-                </div>
+        {mode === 'signup' && (
+          <>
+            <h2 className="text-xl font-semibold">Crie sua conta</h2>
+            <p className="text-sm text-[#8E8E93] mt-1 mb-5">Leva menos de um minuto. Depois você conecta seu Instagram profissional.</p>
+            <AuthError message={errorMessage} />
+            <form onSubmit={handleSignup} className="space-y-4">
+              <div>
+                <label className="block text-xs text-[#8E8E93] mb-1.5" htmlFor="signup-name">Nome completo</label>
+                <input id="signup-name" type="text" required minLength={2} maxLength={120} autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Maria Souza" className={authInputClass} />
+              </div>
+              <div>
+                <label className="block text-xs text-[#8E8E93] mb-1.5" htmlFor="signup-email">E-mail</label>
+                <input id="signup-email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="seu@email.com" className={authInputClass} />
+              </div>
+              <PasswordField
+                id="signup-password"
+                label="Senha"
+                value={password}
+                onChange={setPassword}
+                autoComplete="new-password"
+                minLength={10}
+                hint="Pelo menos 10 caracteres. Evite sequências e partes do seu e-mail."
+              />
+              <label className="flex items-start gap-2 cursor-pointer select-none text-xs text-[#8E8E93] leading-relaxed">
+                <input type="checkbox" required checked={acceptTerms} onChange={(e) => setAcceptTerms(e.target.checked)} className="mt-0.5 w-3.5 h-3.5 rounded accent-[#10B981] cursor-pointer" />
+                <span>
+                  Li e aceito os{' '}
+                  <a href="/termos" target="_blank" rel="noopener noreferrer" className="text-[#10B981] hover:underline">Termos de Uso</a>{' '}
+                  e a{' '}
+                  <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="text-[#10B981] hover:underline">Política de Privacidade</a>.
+                </span>
+              </label>
+              <button type="submit" disabled={loading || !acceptTerms} className={authPrimaryButton}>
+                {loading ? 'Enviando...' : 'Criar minha conta'}
+              </button>
+            </form>
+            <p className="text-xs text-[#8E8E93] mt-5 text-center">Já tem conta? {link('Entrar', 'login')}</p>
+          </>
+        )}
 
-                <div>
-                  <label className="block text-xs text-[#8E8E93] mb-1.5" htmlFor="login-password">
-                    Senha
-                  </label>
-                  <input
-                    id="login-password"
-                    type="password"
-                    required
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    className="w-full bg-[#0A0A0A] border border-[#242424] focus:border-[#10B981] rounded-lg px-3 py-2 text-sm text-white placeholder-[#4E4E52] outline-none"
-                  />
-                </div>
+        {mode === 'signup-sent' && (
+          <>
+            <h2 className="text-xl font-semibold">Confirme seu e-mail</h2>
+            <p className="text-sm text-[#8E8E93] mt-2 leading-relaxed">
+              Enviamos um link de confirmação para <strong className="text-white">{email}</strong>. Abra a mensagem e clique no link para ativar sua conta. O link vale por 24 horas.
+            </p>
+            <p className="text-xs text-[#8E8E93] mt-4 leading-relaxed">Não chegou? Veja a caixa de spam. Se continuar sem receber, {link('tente com outro e-mail', 'signup')}.</p>
+            <div className="mt-5 text-xs text-center">{link('Voltar para entrar', 'login')}</div>
+          </>
+        )}
 
-                <label className="flex items-center gap-2 cursor-pointer select-none text-xs text-[#8E8E93]">
-                  <input
-                    type="checkbox"
-                    checked={rememberMe}
-                    onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-3.5 h-3.5 rounded bg-[#0A0A0A] border-[#242424] accent-[#10B981] cursor-pointer"
-                  />
-                  <span>Manter conectado</span>
-                </label>
+        {mode === 'forgot' && (
+          <>
+            <h2 className="text-xl font-semibold">Esqueci minha senha</h2>
+            <p className="text-sm text-[#8E8E93] mt-1 mb-5">Informe o e-mail da sua conta e enviaremos as instruções para criar uma nova senha.</p>
+            <AuthError message={errorMessage} />
+            <form onSubmit={handleForgot} className="space-y-4">
+              <div>
+                <label className="block text-xs text-[#8E8E93] mb-1.5" htmlFor="forgot-email">E-mail</label>
+                <input id="forgot-email" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="seu@email.com" className={authInputClass} />
+              </div>
+              <button type="submit" disabled={loading} className={authPrimaryButton}>
+                {loading ? 'Enviando...' : 'Enviar instruções'}
+              </button>
+            </form>
+            <div className="mt-5 text-xs text-center">{link('Voltar para entrar', 'login')}</div>
+          </>
+        )}
 
-                <button
-                  type="submit"
-                  disabled={loading || oauthLoading}
-                  className="w-full bg-[#10B981] hover:bg-[#0EA271] text-[#0A0A0A] font-semibold py-2.5 px-4 rounded-lg text-sm transition-colors cursor-pointer disabled:opacity-50"
-                >
-                  {loading ? 'Entrando...' : 'Entrar'}
-                </button>
-              </form>
-              <p className="text-xs text-[#8E8E93] mt-4 leading-relaxed">
-                A conexão com o Instagram pede acesso ao perfil básico e à publicação, usado apenas
-                para identificar a conta e publicar conteúdos que você aprovar.
-              </p>
+        {mode === 'forgot-sent' && (
+          <>
+            <h2 className="text-xl font-semibold">Verifique seu e-mail</h2>
+            <div className="mt-3">
+              <AuthNotice>Se existir uma conta com este e-mail, enviamos as instruções para criar uma nova senha. O link vale por 1 hora.</AuthNotice>
             </div>
-          </div>
-
-          <footer className="mt-6 text-center text-xs text-[#8E8E93] flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5">
-            {legalLink('/privacidade', 'Política de Privacidade')}
-            <span className="text-[#3A3A3C]">·</span>
-            {legalLink('/termos', 'Termos de Uso')}
-          </footer>
-        </div>
-      </main>
-    </div>
+            <div className="mt-2 text-xs text-center">{link('Voltar para entrar', 'login')}</div>
+          </>
+        )}
+      </div>
+    </AuthShell>
   );
 };

@@ -23,7 +23,8 @@ const NAV: { view: UserView; label: string; icon: React.ComponentType<{ classNam
 export const UserLayout: React.FC<UserLayoutProps> = ({ user, view, onChangeView, onLogout, children }) => {
   const igName = (user.instagramUsername || '').replace(/^@/, '');
   const isPlaceholder = !igName || igName.toLowerCase().startsWith('cadastro_') || user.connectionStatus === 'DESCONECTADO';
-  const handle = isPlaceholder ? 'Conta de avaliação' : `@${igName}`;
+  // Quem criou ou foi convidado para um espaço de trabalho vê o nome dele enquanto não há Instagram conectado.
+  const handle = isPlaceholder ? (user.workspaceRole ? user.nome : 'Conta de avaliação') : `@${igName}`;
 
   return (
     <div className="min-h-screen bg-[#0A0A0A] text-white font-sans md:flex">

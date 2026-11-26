@@ -83,7 +83,10 @@ async function apiFetch<T>(endpoint: string, options: RequestInit = {}): Promise
 
   if (!response.ok) {
     const baseError = data.user_message || data.error || data.message || `Erro HTTP ${response.status}`;
-    throw new Error(String(baseError));
+    const err = new Error(String(baseError)) as Error & { code?: string; status?: number };
+    err.code = typeof data.code === 'string' ? data.code : undefined;
+    err.status = response.status;
+    throw err;
   }
 
   return data as T;
@@ -98,18 +101,30 @@ export const api = {
     });
   },
 
-  // Cadastro próprio no ATO Social Hub (separado da conexão Instagram)
-  register: async (data: {
-    name: string;
-    email: string;
-    password: string;
-    companyName?: string;
-  }): Promise<AuthResponse & { message?: string }> => {
-    return apiFetch<AuthResponse & { message?: string }>('/api/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  },
+  // Cadastro público: envia o e-mail de confirmação (a conta só é criada depois do clique no link).
+  signup: async (data: { name: string; email: string; password: string; acceptTerms: boolean }): Promise<{ success: boolean; message: string }> =>
+    apiFetch('/api/auth/signup', { method: 'POST', body: JSON.stringify(data) }),
+
+  verifyEmail: async (code: string): Promise<AuthResponse> =>
+    apiFetch('/api/auth/verify-email', { method: 'POST', body: JSON.stringify({ token: code }) }),
+
+  forgotPassword: async (email: string): Promise<{ success: boolean; message: string }> =>
+    apiFetch('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+
+  resetPassword: async (code: string, password: string): Promise<{ success: boolean; message: string }> =>
+    apiFetch('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ token: code, password }) }),
+
+  createWorkspace: async (data: { companyName: string; workspaceName?: string }): Promise<AuthResponse> =>
+    apiFetch('/api/workspaces', { method: 'POST', body: JSON.stringify(data) }),
+
+  createInvite: async (email: string): Promise<{ success: boolean; message: string }> =>
+    apiFetch('/api/invites', { method: 'POST', body: JSON.stringify({ email }) }),
+
+  getInvite: async (code: string): Promise<{ email: string; companyName: string; hasAccount: boolean }> =>
+    apiFetch(`/api/invites/${encodeURIComponent(code)}`, { method: 'GET' }),
+
+  acceptInvite: async (data: { token: string; name?: string; password?: string; acceptTerms?: boolean }): Promise<AuthResponse> =>
+    apiFetch('/api/invites/accept', { method: 'POST', body: JSON.stringify(data) }),
 
   // Perfil atualizado do usuário autenticado (Sala de espera polling)
   getMe: async (): Promise<{ user: AuthResponse['user']; tenant?: any; token?: string }> => {
