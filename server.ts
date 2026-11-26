@@ -75,6 +75,7 @@ import { runDatabaseMigrations, getAppliedMigrations, checkDeployReadiness } fro
 import { createAccountRouter } from './src/routes/accountRoutes.ts';
 import { getUserProfile } from './src/services/accounts.ts';
 import {
+  releaseStaleInstagramAccount,
   loadFreshAccess,
   isAllowedWhileNotActive,
   MembershipError,
@@ -2053,6 +2054,20 @@ function recordSanitizedOAuthDiagnostic(entry: SanitizedOAuthDiagnosticEntry) {
   }
 }
 
+// Logo oficial (o mesmo da tela de login), lido uma vez do arquivo da marca. Sem o arquivo, cai para o texto.
+let brandLogoCache: string | null = null;
+function brandLogoHtml(): string {
+  if (brandLogoCache !== null) return brandLogoCache;
+  try {
+    const raw = fs.readFileSync(path.join(__dirname, 'src', 'assets', 'brand', 'ato-compacto-branca-ponto-verde.svg'), 'utf8');
+    brandLogoCache = raw.replace(/<\?xml[^>]*\?>/, '').replace('width="260" height="91"', 'width="150" height="52"');
+  } catch {
+    brandLogoCache = 'ATO<span style="color:#39FF14">.</span>';
+  }
+  return brandLogoCache;
+}
+const BRAND_FONT_LINK = '<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Space+Grotesk:wght@500&display=swap" rel="stylesheet">';
+
 function renderOAuthErrorHtmlPage(userMessage: string, reasonCode: string, step: string): string {
   const safeMessage = String(userMessage || IG_USER_MSG_TEMPORARY_ERROR)
     .replace(/&/g, '&amp;')
@@ -2066,6 +2081,7 @@ function renderOAuthErrorHtmlPage(userMessage: string, reasonCode: string, step:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Conexão Instagram - ATO Social Hub</title>
+  ${BRAND_FONT_LINK}
   <style>
     body {
       background-color: #0A0A0A;
@@ -2116,7 +2132,7 @@ function renderOAuthErrorHtmlPage(userMessage: string, reasonCode: string, step:
 </head>
 <body>
   <div class="card">
-    <div class="logo">ATO<span>.</span></div>
+    <div class="logo">${brandLogoHtml()}</div>
     <h2>Conexão não concluída</h2>
     <p id="user-error-msg">${safeMessage}</p>
     <p style="font-size:11px;color:#6B7280;margin:-12px 0 20px;font-family:monospace">Código: ${String(step).replace(/[^A-Za-z0-9_.-]/g,"").slice(0,60)} / ${String(reasonCode).replace(/[^A-Za-z0-9_.-]/g,"").slice(0,60)}</p>
@@ -2502,6 +2518,7 @@ function renderInstagramPopupPage(title: string, bodyHtml: string, script: strin
   return `<!DOCTYPE html>
 <html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escapeHtml(title)}</title>
+${BRAND_FONT_LINK}
 <style>
 body{background:#0A0A0A;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;padding:24px;box-sizing:border-box}
 .card{background:#121212;border:1px solid #242424;border-radius:16px;padding:32px 28px;text-align:center;max-width:400px;width:100%;box-shadow:0 10px 30px rgba(0,0,0,.5)}
@@ -2510,7 +2527,7 @@ h2{margin:0 0 10px;font-size:18px;font-weight:600}p{color:#8E8E93;font-size:13px
 .badge{display:inline-block;background:#1A1A1A;border:1px solid #2E2E2E;font-family:monospace;font-size:12px;padding:5px 12px;border-radius:8px;margin-bottom:20px}
 .acc{display:block;width:100%;background:#1A1A1A;border:1px solid #2E2E2E;color:#fff;font-family:monospace;font-size:14px;padding:12px;border-radius:10px;margin:0 0 10px;cursor:pointer}
 .acc:hover{border-color:#10B981}
-</style></head><body><div class="card"><div class="logo">ATO<span>.</span></div>${bodyHtml}</div>
+</style></head><body><div class="card"><div class="logo">${brandLogoHtml()}</div>${bodyHtml}</div>
 <script>${script}</script></body></html>`;
 }
 
@@ -2621,7 +2638,7 @@ async function linkInstagramAccountToCompany(params: {
   // Etapa 3 — vínculo por Instagram ID, sempre dentro da empresa do usuário autenticado.
   const { state } = params;
   const stateTenant = state.tenantId ? tenants.find((t) => t.id === state.tenantId) : undefined;
-  const existingByIgId = tenants.find((t) => String(t.instagramUserId || '') === verifiedIgId);
+  let existingByIgId = tenants.find((t) => String(t.instagramUserId || '') === verifiedIgId);
 
   // Conexão pessoal (usuário ainda sem empresa liberada): nunca toca conta de empresa e nunca concede acesso.
   if (state.role === 'TENANT' && !stateTenant) {
@@ -2636,7 +2653,13 @@ async function linkInstagramAccountToCompany(params: {
       'SELECT id, company_id, connected_by_user_id FROM instagram_accounts WHERE instagram_user_id = $1 OR LOWER(username) = LOWER($2) LIMIT 1',
       [verifiedIgId, realUsername]
     );
-    const hit = owned.rows[0];
+    let hit: (typeof owned.rows)[number] | undefined = owned.rows[0];
+    if (hit && (hit.company_id || (hit.connected_by_user_id && hit.connected_by_user_id !== state.userId))) {
+      if (await releaseStaleInstagramAccount(hit.id, state.userId).catch(() => false)) {
+        await syncStateFromPostgres(true).catch(() => undefined);
+        hit = undefined;
+      }
+    }
     if (hit && (hit.company_id || (hit.connected_by_user_id && hit.connected_by_user_id !== state.userId))) {
       return { ok: false, status: 403, reasonCode: 'CROSS_TENANT_VIOLATION', userMessage: 'Este Instagram já está vinculado a outra conta do ATO Social Hub.', step: '3_BLOQUEIO_CONTA_JA_VINCULADA' };
     }
@@ -2680,6 +2703,15 @@ async function linkInstagramAccountToCompany(params: {
     return Boolean(fa && fb && fa === fb);
   };
 
+  // Registro antigo (de quando cada Instagram era uma "conta do sistema") que não está mais conectado não pode bloquear
+  // quem acabou de autenticar este Instagram na Meta: é arquivado e a conexão segue. Conta conectada de verdade continua protegida.
+  if (existingByIgId && stateTenant && !sameCompany(existingByIgId, stateTenant)) {
+    const released = await releaseStaleInstagramAccount(existingByIgId.id, state.userId).catch(() => false);
+    if (released) {
+      await syncStateFromPostgres(true).catch(() => undefined);
+      existingByIgId = tenants.find((t) => String(t.instagramUserId || '') === verifiedIgId);
+    }
+  }
   if (existingByIgId && stateTenant && !sameCompany(existingByIgId, stateTenant)) {
     return { ok: false, status: 403, reasonCode: 'CROSS_TENANT_VIOLATION', userMessage: 'Este Instagram já está vinculado a outra conta do ATO Social Hub.', step: '3_BLOQUEIO_VINCULACAO_OUTRA_EMPRESA' };
   }

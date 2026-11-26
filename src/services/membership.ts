@@ -375,6 +375,39 @@ export async function deleteUser(actorId: string, userId: string, confirmEmail: 
 
 // ------------------------------------------------------------------ Contas Instagram (área própria)
 
+/**
+ * Registro antigo de uma conta Instagram que NÃO está mais conectada (desconectada, token inválido ou expirado)
+ * e que impede uma nova conexão do mesmo Instagram. Não apaga nada: o registro é arquivado (token removido e
+ * identificadores renomeados), mantendo empresa, posts e histórico para auditoria. Quem prova ser dono do Instagram
+ * é a própria Meta, que acabou de autenticar a conta. Conta CONECTADA com token válido nunca é liberada por aqui.
+ */
+export async function releaseStaleInstagramAccount(accountId: string, actorId: string): Promise<boolean> {
+  return withTransaction(async (tx) => {
+    const a = (await tx.query(
+      'SELECT id, company_id, connection_status, has_valid_token, token_expires_at FROM instagram_accounts WHERE id = $1 FOR UPDATE',
+      [accountId]
+    )).rows[0];
+    if (!a) return false;
+    const expired = a.token_expires_at ? new Date(a.token_expires_at).getTime() < Date.now() : false;
+    // "Conectada" = estado CONECTADO e token dentro da validade. Desconexão do admin, reconexão necessária e token vencido liberam.
+    const live = a.connection_status === 'CONECTADO' && !expired;
+    if (live) return false;
+    const tag = hex(4);
+    await tx.query(
+      `UPDATE instagram_accounts
+          SET username = LEFT(username, 200) || '_liberada_' || $2,
+              instagram_user_id = 'liberada_' || $2 || '_' || LEFT(instagram_user_id, 100),
+              encrypted_access_token = NULL, has_valid_token = FALSE, connection_status = 'DESCONECTADO',
+              last_connection_error = 'Conta arquivada: o Instagram foi conectado novamente em outro cadastro', updated_at = NOW()
+        WHERE id = $1`,
+      [accountId, tag]
+    );
+    await audit(tx, { actor: actorId, action: 'INSTAGRAM_RELEASED', from: a.company_id || null, details: { accountId } });
+    return true;
+  });
+}
+
+
 export async function listInstagramForAdmin() {
   const r = await dbQuery<any>(
     `SELECT ia.id, ia.username, ia.instagram_user_id, ia.company_id, c.name AS company_name, ia.status, ia.connection_status,

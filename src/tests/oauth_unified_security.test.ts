@@ -585,6 +585,42 @@ describe('Unified Login — segurança de autenticação, vínculo por ID e isol
       expect(me.body.user.personalInstagram).toEqual({ username: graph.accounts[0].username, connected: true });
     }, 30000);
 
+    it('registro antigo desconectado do mesmo Instagram não bloqueia: é arquivado (nada apagado) e a nova conexão conclui', async () => {
+      resetGraph();
+      // Registro antigo (fluxo anterior): mesma conta Instagram, vinculada a outra empresa, mas DESCONECTADA.
+      await seedTenant('tenant_antigo_desc', { driveFolderName: 'Antigo Desc', username: 'conta_antiga', instagramUserId: graph.accounts[0].id, connectionStatus: 'DESCONECTADO', hasValidToken: false });
+      await dbQuery(`INSERT INTO companies (id,name,drive_folder_name) VALUES ('company_antiga_desc','Empresa Antiga Desc','Antigo Desc') ON CONFLICT DO NOTHING`);
+      await dbQuery(`UPDATE instagram_accounts SET company_id='company_antiga_desc' WHERE id='tenant_antigo_desc'`);
+      await seedTenant('tenant_novo_dono', { driveFolderName: 'Novo Dono' });
+      const { state, cookie } = await startFlow(tenantUser('tenant_novo_dono'));
+      const cb = await callback(state, cookie);
+      expect(cb.status).toBe(200);
+      const novo = await getInstagramAccountByIdOrUser('tenant_novo_dono');
+      expect(novo?.connectionStatus).toBe('CONECTADO');
+      expect(novo?.instagramUserId).toBe(graph.accounts[0].id);
+      // o registro antigo continua existindo (histórico), mas arquivado e sem token
+      const velho = (await dbQuery<any>(`SELECT username, instagram_user_id, encrypted_access_token, company_id FROM instagram_accounts WHERE id='tenant_antigo_desc'`)).rows[0];
+      expect(velho.company_id).toBe('company_antiga_desc');
+      expect(velho.encrypted_access_token).toBeNull();
+      expect(velho.instagram_user_id).not.toBe(graph.accounts[0].id);
+      expect(velho.username).toMatch(/_liberada_/);
+      expect((await dbQuery<any>(`SELECT action FROM admin_audit_log WHERE action='INSTAGRAM_RELEASED'`)).rows.length).toBeGreaterThan(0);
+    }, 30000);
+
+    it('Instagram CONECTADO de verdade em outra empresa continua protegido: não é liberado nem sobrescrito', async () => {
+      resetGraph();
+      await seedTenant('tenant_viva', { driveFolderName: 'Viva', username: 'conta_viva', instagramUserId: graph.accounts[0].id, connectionStatus: 'CONECTADO', hasValidToken: true });
+      await dbQuery(`INSERT INTO companies (id,name,drive_folder_name) VALUES ('company_viva','Empresa Viva','Viva') ON CONFLICT DO NOTHING`);
+      await dbQuery(`UPDATE instagram_accounts SET company_id='company_viva', encrypted_access_token='token-vivo', token_expires_at = NOW() + INTERVAL '30 days' WHERE id='tenant_viva'`);
+      await seedTenant('tenant_invasor', { driveFolderName: 'Invasor' });
+      const { state, cookie } = await startFlow(tenantUser('tenant_invasor'));
+      const cb = await callback(state, cookie);
+      expect(cb.status).toBe(403);
+      expect(cb.body.reason_code).toBe('CROSS_TENANT_VIOLATION');
+      const viva = (await dbQuery<any>(`SELECT instagram_user_id, encrypted_access_token, connection_status FROM instagram_accounts WHERE id='tenant_viva'`)).rows[0];
+      expect(viva).toEqual({ instagram_user_id: graph.accounts[0].id, encrypted_access_token: 'token-vivo', connection_status: 'CONECTADO' });
+    }, 30000);
+
     it('J. usuário pendente não consegue conectar uma conta Instagram que já pertence a uma empresa (a conexão da empresa não muda)', async () => {
       resetGraph();
       await seedTenant('tenant_ato_conectada', { driveFolderName: 'ATO Conectada', username: 'ato_real', instagramUserId: graph.accounts[0].id, connectionStatus: 'CONECTADO', hasValidToken: true });
