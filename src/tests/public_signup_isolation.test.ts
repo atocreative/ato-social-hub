@@ -84,6 +84,14 @@ afterAll(async () => {
   await new Promise<void>((r) => server.close(() => r()));
 });
 
+/** Quem cria a empresa e libera o usuário é o administrador (aprovação). Devolve { status, body: { user, token } } da sessão atualizada. */
+async function workspaceFor(session: { token: string; user: { id: string } }, companyName: string) {
+  const ap = await call('POST', `/api/admin/users/${session.user.id}/approve`, { newCompanyName: companyName, role: 'OWNER' }, { token: adminToken });
+  if (ap.status !== 200) return { status: ap.status, body: ap.body };
+  const me = await call('GET', '/api/auth/me', undefined, { token: session.token });
+  return { status: me.status === 200 ? 201 : me.status, body: me.body };
+}
+
 const LEITURAS = [
   '/api/posts', '/api/tenants', '/api/companies', '/api/observations', '/api/creative-context',
   '/api/drive/folders', '/api/scheduler/status', '/api/system/gas-config', '/api/posts/post_vazamento/captions',
@@ -110,12 +118,12 @@ describe('Cadastro público não alcança clientes existentes', () => {
     expect(u.company_id).toBeNull(); // nenhuma rota o anexa a uma empresa (nem à "Ato")
     expect(u.instagram_account_id).toBeNull();
     expect(u.role).toBe('TENANT');
-    expect((await call('POST', '/api/workspaces', { companyName: 'Meu Espaço Limpo' }, { token: session.token })).status).toBe(201);
+    expect((await call('POST', '/api/workspaces', { companyName: 'Meu Espaço Limpo' }, { token: session.token })).status).toBe(403); // sem autoconcessão
   });
 
-  it('espaço novo com o mesmo nome da pasta de um cliente existente não enxerga nem altera nada dele', async () => {
+  it('espaço novo com nome parecido com o da pasta de um cliente existente não enxerga nem altera nada dele', async () => {
     const session = await signupAndVerify('homonimo@exemplo.com');
-    const w = await call('POST', '/api/workspaces', { companyName: 'Pasta Vazamento' }, { token: session.token });
+    const w = await workspaceFor(session, 'Pasta Vazamento Filial');
     expect(w.status).toBe(201);
     const token = w.body.token;
     const posts = await call('GET', '/api/posts', undefined, { token });
@@ -139,7 +147,13 @@ describe('Cadastro público não alcança clientes existentes', () => {
   it('o espaço novo nunca herda nome de pasta de cliente existente nem se junta à empresa "Ato"', async () => {
     for (const [i, nome] of ['Ato', 'Pasta Vazamento', 'cliente vazamento sa'].entries()) {
       const session = await signupAndVerify(`homonimo-${i}@exemplo.com`);
-      const w = await call('POST', '/api/workspaces', { companyName: nome }, { token: session.token });
+      const w = await workspaceFor(session, nome);
+      if (w.status === 409) {
+        // Nome de empresa já existente: nenhuma empresa é criada nem vinculada, e o usuário segue aguardando aprovação.
+        const me = await call('GET', '/api/auth/me', undefined, { token: session.token });
+        expect(me.body.user.accessStatus).toBe('PENDING_APPROVAL');
+        continue;
+      }
       expect(w.status).toBe(201);
       const row = (await dbQuery<any>(
         `SELECT c.drive_folder_name AS folder, ia.drive_folder_name AS ia_folder
@@ -163,7 +177,7 @@ describe('Cadastro público não alcança clientes existentes', () => {
 
   it('nenhuma credencial de administrador é emitida a quem não é administrador global', async () => {
     const session = await signupAndVerify('curioso@exemplo.com');
-    const w = await call('POST', '/api/workspaces', { companyName: 'Curiosos Ltda' }, { token: session.token });
+    const w = await workspaceFor(session, 'Curiosos Ltda');
     for (const token of [session.token, w.body.token]) {
       expect((await call('GET', '/api/system/gas-config', undefined, { token })).status).toBe(403);
       expect((await call('GET', '/api/scheduler/status', undefined, { token })).status).toBe(403);
@@ -175,7 +189,7 @@ describe('Cadastro público não alcança clientes existentes', () => {
 
   it('Atualizar posts (sync-drive) devolve ao cliente só o que é dele', async () => {
     const session = await signupAndVerify('sync@exemplo.com');
-    const w = await call('POST', '/api/workspaces', { companyName: 'Sync Ltda' }, { token: session.token });
+    const w = await workspaceFor(session, 'Sync Ltda');
     const r = await call('POST', '/api/posts/sync-drive', { acao: 'SINCRONIZAR_TUDO' }, { token: w.body.token });
     expect(JSON.stringify(r.body)).not.toMatch(MARCADORES);
   });

@@ -4,6 +4,7 @@ import { getInstagramAccountByIdOrUser } from '../db/repository.ts';
 import { hashPassword } from '../utils/passwordHash.ts';
 import { consumeToken, issueToken, peekToken } from './authTokens.ts';
 import { mailTemplates, sendMail, sendMailBackground } from './mailer.ts';
+import { loadFreshAccess } from './membership.ts';
 import type { UserProfile } from '../types/index.ts';
 
 export class AccountError extends Error {
@@ -76,12 +77,20 @@ export async function verifyEmailAndCreateUser(rawToken: string): Promise<{ user
   if (!tok || !tok.payload?.passwordHash) throw new AccountError(400, 'INVALID_TOKEN', 'Este link é inválido, expirou ou já foi usado. Peça um novo cadastro.');
   const userId = `usr_${crypto.randomBytes(8).toString('hex')}`;
   try {
-    await dbQuery(
-      `INSERT INTO users (id, email, name, password_hash, role, status, company_id, instagram_account_id, permissions,
-                          email_verified_at, terms_accepted_at, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, 'TENANT', 'APROVADO', NULL, NULL, $5::jsonb, NOW(), $6, NOW(), NOW())`,
-      [userId, tok.email, tok.payload.name, tok.payload.passwordHash, JSON.stringify(['VIEW_COMPANY_POSTS', 'APPROVE_POSTS']), tok.payload.termsAcceptedAt || new Date().toISOString()]
-    );
+    // Conta nasce AGUARDANDO APROVAÇÃO e sem empresa: confirmar o e-mail prova a identidade, não concede acesso a dados.
+    await withTransaction(async (tx) => {
+      await tx.query(
+        `INSERT INTO users (id, email, name, password_hash, role, status, company_id, instagram_account_id, permissions,
+                            email_verified_at, terms_accepted_at, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, 'TENANT', 'AGUARDANDO_APROVACAO', NULL, NULL, $5::jsonb, NOW(), $6, NOW(), NOW())`,
+        [userId, tok.email, tok.payload.name, tok.payload.passwordHash, JSON.stringify(['VIEW_COMPANY_POSTS', 'APPROVE_POSTS']), tok.payload.termsAcceptedAt || new Date().toISOString()]
+      );
+      await tx.query(
+        `INSERT INTO memberships (id, user_id, company_id, role, status, requested_at, created_at, updated_at)
+         VALUES ($1, $2, NULL, 'MEMBER', 'PENDING_APPROVAL', NOW(), NOW(), NOW())`,
+        [`mem_${crypto.randomBytes(8).toString('hex')}`, userId]
+      );
+    });
   } catch (err: any) {
     if (String(err?.code) === '23505') throw new AccountError(409, 'ALREADY_EXISTS', 'Este e-mail já está cadastrado. Entre com a sua senha.');
     throw err;
@@ -122,6 +131,10 @@ const hex = (n: number) => crypto.randomBytes(n).toString('hex');
 
 /** Cria o espaço de trabalho (empresa + conta de destino provisória) e torna o usuário seu proprietário, numa transação. */
 export async function createWorkspace(userId: string, input: { companyName: unknown; workspaceName?: unknown }): Promise<void> {
+  // Fluxo com aprovação: quem cria a empresa e vincula o usuário é o administrador (membership.approveUser).
+  // Auto-criar empresa aqui permitiria a qualquer cadastro se autoconceder um espaço de trabalho.
+  throw new AccountError(403, 'APPROVAL_REQUIRED', 'Seu acesso depende da aprovação do administrador. O espaço de trabalho será liberado após a aprovação.');
+  // eslint-disable-next-line no-unreachable
   const companyName = String(input.companyName ?? '').trim().replace(/\s+/g, ' ');
   const workspaceName = String(input.workspaceName ?? '').trim().replace(/\s+/g, ' ') || companyName;
   if (companyName.length < 2 || companyName.length > 120) throw new AccountError(400, 'INVALID_COMPANY', 'Informe o nome da empresa ou marca.');
@@ -171,7 +184,7 @@ export async function createWorkspace(userId: string, input: { companyName: unkn
   });
 }
 
-/** Perfil usado na sessão. Reflete sempre o estado atual do banco. */
+/** Perfil usado na sessão. Reflete sempre o estado atual do banco (vínculo, aprovação, empresa e conta). */
 export async function getUserProfile(userId: string): Promise<{ user: UserProfile; tenant?: any } | null> {
   const r = await dbQuery<any>(
     `SELECT id, email, name, role, status, company_id, instagram_account_id, workspace_role, email_verified_at FROM users WHERE id = $1`,
@@ -182,27 +195,45 @@ export async function getUserProfile(userId: string): Promise<{ user: UserProfil
   if (row.role === 'ADMIN') {
     return { user: { id: row.id, email: row.email, nome: row.name, role: 'ADMIN', status: row.status } };
   }
+  const access = await loadFreshAccess(userId);
+  const accessStatus = access?.accessStatus || 'PENDING_APPROVAL';
+  const active = accessStatus === 'ACTIVE';
   let tenant: any = null;
-  if (row.instagram_account_id) tenant = await getInstagramAccountByIdOrUser(row.instagram_account_id);
+  // Só o vínculo APROVADO expõe a conta/empresa. Pendente, rejeitado e suspenso nunca recebem dados de empresa.
+  if (active && access?.tenant?.id) tenant = await getInstagramAccountByIdOrUser(access.tenant.id);
+  let companyName: string | undefined;
+  if (active && access?.companyId) {
+    const c = await dbQuery<{ name: string }>('SELECT name FROM companies WHERE id = $1', [access.companyId]);
+    companyName = c.rows[0]?.name;
+  }
+  // Instagram conectado pelo próprio usuário (antes ou fora da empresa): informativo, não concede acesso.
+  const mine = await dbQuery<{ username: string; instagram_user_id: string; connection_status: string }>(
+    'SELECT username, instagram_user_id, connection_status FROM instagram_accounts WHERE connected_by_user_id = $1 ORDER BY updated_at DESC LIMIT 1',
+    [userId]
+  );
+  const m = mine.rows[0];
+  const mineReal = m && !String(m.username).startsWith('cadastro_') && !String(m.instagram_user_id).startsWith('pending_ig_');
   const user: UserProfile = {
     id: row.id,
     email: row.email,
-    nome: tenant?.nome || row.name,
+    nome: row.name,
     role: 'TENANT',
-    tenantId: tenant?.id || row.instagram_account_id || undefined,
-    companyId: tenant?.companyId || row.company_id || undefined,
+    tenantId: tenant?.id || undefined,
+    companyId: access?.companyId || undefined,
     instagramUserId: tenant?.instagramUserId || undefined,
     instagramUsername: tenant?.username || undefined,
-    status: tenant?.status || row.status || 'APROVADO',
+    status: active ? tenant?.status || 'APROVADO' : 'AGUARDANDO_APROVACAO',
     driveFolderName: tenant?.driveFolderName || null,
     driveFolderId: tenant?.driveFolderId || null,
     connectionStatus: tenant?.connectionStatus || 'DESCONECTADO',
     tokenIssuedAt: tenant?.tokenIssuedAt,
     tokenExpiresAt: tenant?.tokenExpiresAt,
     grantedScopes: tenant?.grantedScopes || [],
-    workspaceRole: row.workspace_role || undefined,
+    workspaceRole: access?.workspaceRole || undefined,
     emailVerified: Boolean(row.email_verified_at) || undefined,
-    needsWorkspace: !row.company_id && !row.instagram_account_id,
+    accessStatus,
+    companyName,
+    personalInstagram: mineReal ? { username: m.username, connected: m.connection_status === 'CONECTADO' } : null,
   };
   return { user, tenant: tenant || undefined };
 }
@@ -291,6 +322,7 @@ export async function acceptInvite(input: { token: string; name?: unknown; passw
           WHERE id = $1`,
         [ex.id, companyId, tenantId]
       );
+      await activateMembership(tx, ex.id, companyId);
       return { userId: ex.id };
     }
     const userId = `usr_${hex(8)}`;
@@ -300,6 +332,20 @@ export async function acceptInvite(input: { token: string; name?: unknown; passw
        VALUES ($1, $2, $3, $4, 'TENANT', 'APROVADO', $5, $6, 'MEMBER', $7::jsonb, NOW(), NOW(), NOW(), NOW())`,
       [userId, peek.email, String(input.name).trim().replace(/\s+/g, ' '), hashPassword(String(input.password)), companyId, tenantId, JSON.stringify(['VIEW_COMPANY_POSTS', 'APPROVE_POSTS'])]
     );
+    await activateMembership(tx, userId, companyId);
     return { userId };
   });
+}
+
+/** Convite emitido por administrador ou proprietário é uma autorização explícita: o vínculo nasce ACTIVE, papel MEMBRO. */
+async function activateMembership(tx: { query: (sql: string, p?: any[]) => Promise<any> }, userId: string, companyId: string) {
+  const cur = await tx.query('SELECT status FROM memberships WHERE user_id = $1', [userId]);
+  if (cur.rows[0]?.status === 'SUSPENDED') throw new AccountError(403, 'ACCOUNT_SUSPENDED', 'Esta conta está suspensa. Fale com o administrador.');
+  await tx.query(
+    `INSERT INTO memberships (id, user_id, company_id, role, status, requested_at, decided_at, created_at, updated_at)
+     VALUES ($1,$2,$3,'MEMBER','ACTIVE',NOW(),NOW(),NOW(),NOW())
+     ON CONFLICT (user_id) DO UPDATE SET company_id = $3, role = 'MEMBER', status = 'ACTIVE', decided_at = NOW(), updated_at = NOW()`,
+    [`mem_${hex(8)}`, userId, companyId]
+  );
+  await tx.query(`UPDATE users SET status = 'APROVADO', workspace_role = COALESCE(workspace_role, 'MEMBER') WHERE id = $1`, [userId]);
 }

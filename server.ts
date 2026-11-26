@@ -74,6 +74,24 @@ import {
 import { runDatabaseMigrations, getAppliedMigrations, checkDeployReadiness } from './src/db/migrations.ts';
 import { createAccountRouter } from './src/routes/accountRoutes.ts';
 import { getUserProfile } from './src/services/accounts.ts';
+import {
+  loadFreshAccess,
+  isAllowedWhileNotActive,
+  MembershipError,
+  listUsersForAdmin,
+  listCompaniesForAdmin,
+  approveUser,
+  rejectUser,
+  suspendUser,
+  reactivateUser,
+  changeUserCompany,
+  changeUserRole,
+  removeUserCompany,
+  deleteUser,
+  listInstagramForAdmin,
+  linkInstagramToCompany,
+  disconnectInstagram,
+} from './src/services/membership.ts';
 import { allowAttempt, hashForBucket } from './src/services/authTokens.ts';
 import {
   ensureDefaultAdminUser,
@@ -728,6 +746,52 @@ app.use('/api', async (req: Request, res: Response, next: NextFunction) => {
   return next();
 });
 
+
+/**
+ * PORTÃO DE ACESSO (backend). Para todo JWT de TENANT lê o vínculo VIGENTE no PostgreSQL:
+ *  - usuário excluído ou com sessão cortada (sessions_valid_after) => 401;
+ *  - SUSPENDED => 403;
+ *  - PENDING_APPROVAL / REJECTED => só as rotas de conta e de conexão do Instagram;
+ *  - ACTIVE => empresa/conta SEMPRE as do banco (um JWT antigo nunca mantém acesso à empresa anterior).
+ * Não depende do que está dentro do token, então aprovação, troca de empresa e suspensão valem na hora.
+ */
+async function accessGate(req: Request, res: Response, next: NextFunction) {
+  const h = String(req.headers.authorization || '');
+  if (!h.startsWith('Bearer ')) return next();
+  let decoded: any;
+  try {
+    decoded = jwt.verify(h.slice(7).trim(), getEnv().JWT_SECRET);
+  } catch {
+    return next(); // requireAuth responde 401 nas rotas protegidas
+  }
+  if (!decoded || decoded.role !== 'TENANT' || !decoded.id) return next();
+  try {
+    const fa = await loadFreshAccess(String(decoded.id));
+    if (!fa) return res.status(401).json({ error: 'Sessão inválida. Faça login novamente.', code: 'SESSION_INVALID' });
+    if (fa.sessionsValidAfterMs !== null) {
+      const iatMs = Number(decoded.iat) * 1000;
+      if (!Number.isFinite(iatMs) || iatMs < Math.floor(fa.sessionsValidAfterMs / 1000) * 1000) {
+        return res.status(401).json({ error: 'Sessão encerrada. Faça login novamente.', code: 'SESSION_REVOKED' });
+      }
+    }
+    if (fa.accessStatus === 'SUSPENDED') {
+      return res.status(403).json({ error: 'Sua conta está suspensa. Fale com o administrador.', code: 'ACCOUNT_SUSPENDED', accessStatus: fa.accessStatus });
+    }
+    if (fa.accessStatus !== 'ACTIVE' && !isAllowedWhileNotActive(req.path)) {
+      return res.status(403).json({
+        error: fa.accessStatus === 'REJECTED' ? 'Seu cadastro não foi aprovado.' : 'Aguardando aprovação do administrador.',
+        code: fa.accessStatus === 'REJECTED' ? 'ACCESS_REJECTED' : 'PENDING_APPROVAL',
+        accessStatus: fa.accessStatus,
+      });
+    }
+    (req as any).freshAccess = fa;
+  } catch (err: any) {
+    console.error('[access-gate] falha ao consultar vínculo:', err?.message || err);
+    return res.status(503).json({ error: 'Não foi possível validar seu acesso agora. Tente novamente.', code: 'ACCESS_CHECK_UNAVAILABLE' });
+  }
+  return next();
+}
+app.use('/api', accessGate);
 
 /**
  * Converte links de visualização HTML do Google Drive (/file/d/<ID>/view)
@@ -1478,6 +1542,19 @@ export function requireAuth(req: AuthenticatedRequest, res: Response, next: Next
     if (isSessionRevoked(decoded as any) || isUserSessionRevoked(decoded as any)) {
       return res.status(401).json({ error: 'Sessão encerrada por segurança. Faça login novamente.' });
     }
+    const fa = (req as any).freshAccess as Awaited<ReturnType<typeof loadFreshAccess>> | undefined;
+    if (fa && decoded.role === 'TENANT') {
+      // O banco manda; o que estiver no token sobre empresa/conta é ignorado.
+      const d: any = decoded;
+      d.companyId = fa.companyId || undefined;
+      d.tenantId = fa.tenant?.id || undefined;
+      d.instagramUserId = fa.tenant?.instagramUserId || undefined;
+      d.instagramUsername = fa.tenant?.username || undefined;
+      d.driveFolderName = fa.tenant?.driveFolderName || null;
+      d.driveFolderId = fa.tenant?.driveFolderId || null;
+      d.workspaceRole = fa.workspaceRole || undefined;
+      d.accessStatus = fa.accessStatus;
+    }
     req.user = decoded;
     next();
   } catch {
@@ -1584,7 +1661,15 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
   if (!(await allowAttempt(`login:ip:${req.ip}`, 40, 900))) return tooMany();
   if (!(await allowAttempt(`login:email:${hashForBucket(String(email))}`, 10, 900))) return tooMany();
 
-  const authResult = await authenticateSocialHubUser(String(email), String(password));
+  let authResult: Awaited<ReturnType<typeof authenticateSocialHubUser>>;
+  try {
+    authResult = await authenticateSocialHubUser(String(email), String(password));
+  } catch (err: any) {
+    if (err?.code === 'ACCOUNT_SUSPENDED') {
+      return res.status(403).json({ error: 'Sua conta está suspensa. Fale com o administrador.', code: 'ACCOUNT_SUSPENDED' });
+    }
+    throw err;
+  }
 
   if (!authResult) {
     return res.status(401).json({
@@ -1693,13 +1778,14 @@ app.get('/api/auth/me', requireAuth, async (req: AuthenticatedRequest, res: Resp
   const { JWT_SECRET } = getEnv();
   const user = req.user!;
   if (user.role === 'TENANT') {
-    // Cadastro recém-confirmado, ainda sem espaço de trabalho: não há conta Instagram nem empresa para procurar.
-    if (!user.tenantId && !user.instagramUsername && !user.instagramUserId) {
+    // Sem conta de empresa liberada (aguardando aprovação, rejeitado ou empresa ainda sem conta): o perfil vem do banco,
+    // sem nenhum dado de empresa. É o que a tela "Aguardando aprovação" e o dashboard inicial usam.
+    if (!user.tenantId) {
       const fresh = await getUserProfile(user.id);
-      if (fresh?.user.needsWorkspace) {
-        const tk = jwt.sign(fresh.user, JWT_SECRET, { expiresIn: '72h' });
-        return res.json({ user: fresh.user, token: tk });
-      }
+      if (!fresh) return res.status(401).json({ error: 'Sessão inválida. Faça login novamente.' });
+      const { iat: _i, exp: _e, ...cleanFresh } = fresh.user as any;
+      const tk = jwt.sign(cleanFresh, JWT_SECRET, { expiresIn: '72h' });
+      return res.json({ user: fresh.user, token: tk });
     }
     let tenant = tenants.find(
       (t) =>
@@ -2132,22 +2218,26 @@ app.get('/api/auth/instagram/url', requireAuth, async (req: AuthenticatedRequest
   let stateFolder: string | undefined;
 
   if (user.role === 'TENANT') {
-    const ownTenant = tenants.find((t) => t.id === user.tenantId);
-    if (!ownTenant) {
+    const ownTenant = user.tenantId ? tenants.find((t) => t.id === user.tenantId) : undefined;
+    if (!ownTenant && !user.tenantId && (user as any).accessStatus && (user as any).accessStatus !== 'ACTIVE') {
+      // Conexão pessoal antes da aprovação: fica guardada como conexão do usuário, sem empresa e sem acesso a dados.
+      if (queryTenantId || queryFolder) {
+        return res.status(403).json({ error: 'Acesso negado: sua conta ainda não está vinculada a uma empresa.' });
+      }
+    } else if (!ownTenant) {
       return res.status(403).json({ error: 'Sua empresa não foi encontrada. Entre em contato com o suporte.' });
-    }
-    if (queryTenantId && queryTenantId !== ownTenant.id) {
+    } else if (queryTenantId && queryTenantId !== ownTenant.id) {
       return res.status(403).json({
         error: 'Acesso negado: você só tem permissão para conectar ou reconectar contas da sua própria empresa.',
       });
     }
-    const ownFolder = (ownTenant.driveFolderName || '').trim();
-    if (queryFolder && (!ownFolder || queryFolder.toLowerCase() !== ownFolder.toLowerCase())) {
+    const ownFolder = (ownTenant?.driveFolderName || '').trim();
+    if (ownTenant && queryFolder && (!ownFolder || queryFolder.toLowerCase() !== ownFolder.toLowerCase())) {
       return res.status(403).json({
         error: 'Acesso negado: você não possui permissão para vincular contas do Instagram a outra empresa.',
       });
     }
-    stateTenantId = ownTenant.id;
+    stateTenantId = ownTenant?.id;
     stateFolder = ownFolder || undefined;
   } else if (user.role === 'ADMIN') {
     stateTenantId = queryTenantId;
@@ -2526,8 +2616,53 @@ async function linkInstagramAccountToCompany(params: {
   const stateTenant = state.tenantId ? tenants.find((t) => t.id === state.tenantId) : undefined;
   const existingByIgId = tenants.find((t) => String(t.instagramUserId || '') === verifiedIgId);
 
+  // Conexão pessoal (usuário ainda sem empresa liberada): nunca toca conta de empresa e nunca concede acesso.
   if (state.role === 'TENANT' && !stateTenant) {
-    return { ok: false, status: 403, reasonCode: 'TENANT_NOT_FOUND', userMessage: 'Empresa não encontrada para esta sessão.', step: '3_EMPRESA_NAO_ENCONTRADA' };
+    const access = await loadFreshAccess(state.userId).catch(() => null);
+    if (state.tenantId || !access || access.role !== 'TENANT' || (access.accessStatus === 'ACTIVE' && access.tenant)) {
+      return { ok: false, status: 403, reasonCode: 'TENANT_NOT_FOUND', userMessage: 'Empresa não encontrada para esta sessão.', step: '3_EMPRESA_NAO_ENCONTRADA' };
+    }
+    if (access.accessStatus === 'SUSPENDED') {
+      return { ok: false, status: 403, reasonCode: 'TENANT_NOT_FOUND', userMessage: 'Sua conta está suspensa. Fale com o administrador.', step: '3_USUARIO_SUSPENSO' };
+    }
+    const owned = await dbQuery<{ id: string; company_id: string | null; connected_by_user_id: string | null }>(
+      'SELECT id, company_id, connected_by_user_id FROM instagram_accounts WHERE instagram_user_id = $1 OR LOWER(username) = LOWER($2) LIMIT 1',
+      [verifiedIgId, realUsername]
+    );
+    const hit = owned.rows[0];
+    if (hit && (hit.company_id || (hit.connected_by_user_id && hit.connected_by_user_id !== state.userId))) {
+      return { ok: false, status: 403, reasonCode: 'CROSS_TENANT_VIOLATION', userMessage: 'Esta conta do Instagram já está vinculada a outra empresa ou usuário.', step: '3_BLOQUEIO_CONTA_JA_VINCULADA' };
+    }
+    try {
+      const savedPersonal = await TokenService.persistValidatedAccountToken({
+        username: realUsername,
+        nome: realUsername,
+        instagramUserId: verifiedIgId,
+        accountType: realAccountType || 'BUSINESS',
+        encryptedAccessToken: params.encryptedAccessToken,
+        tokenType: params.tokenType,
+        tokenIssuedAt: params.tokenIssuedAt,
+        tokenExpiresAt: params.tokenExpiresAt || undefined,
+        grantedScopes: params.grantedScopes,
+        preferredTenantId: hit?.id || null,
+        driveFolderName: null,
+        driveFolderId: null,
+        status: 'AGUARDANDO_APROVACAO',
+      });
+      await dbQuery('UPDATE instagram_accounts SET connected_by_user_id = $2 WHERE id = $1 AND company_id IS NULL', [savedPersonal.id, state.userId]);
+      await syncStateFromPostgres(true).catch(() => undefined);
+      return { ok: true, tenant: savedPersonal };
+    } catch (err: any) {
+      const msg = String(err?.message || '');
+      if (msg.startsWith('CROSS_TENANT_VIOLATION')) {
+        return { ok: false, status: 403, reasonCode: 'CROSS_TENANT_VIOLATION', userMessage: 'Esta conta do Instagram já está vinculada a outra empresa.', step: '3_BLOQUEIO_VINCULACAO_OUTRA_EMPRESA' };
+      }
+      if (msg.startsWith('USERNAME_CONFLICT')) {
+        return { ok: false, status: 409, reasonCode: 'USERNAME_CONFLICT', userMessage: 'Este @ já está associado a outro cadastro. Solicite ajuda ao administrador.', step: '3_CONFLITO_USERNAME' };
+      }
+      console.error('[OAuth] Falha ao persistir conexão pessoal:', msg);
+      return { ok: false, status: 500, reasonCode: 'TEMPORARY_TECHNICAL_ERROR', userMessage: IG_USER_MSG_TEMPORARY_ERROR, step: '3_PERSISTENCIA' };
+    }
   }
 
   const sameCompany = (a?: TenantAccount, b?: TenantAccount) => {
@@ -2588,6 +2723,7 @@ async function linkInstagramAccountToCompany(params: {
       driveFolderId: effectiveDriveFolderId,
       status: effectiveDriveFolderName ? 'APROVADO' : 'AGUARDANDO_APROVACAO',
     });
+    await dbQuery('UPDATE instagram_accounts SET connected_by_user_id = COALESCE($2, connected_by_user_id) WHERE id = $1', [saved.id, state.userId || null]).catch(() => undefined);
     await syncStateFromPostgres(true).catch(() => undefined);
     recordSanitizedOAuthDiagnostic({
       timestamp: new Date().toISOString(),
@@ -3199,6 +3335,81 @@ app.post('/api/admin/tenants/:id/revoke', requireAuth, requireAdmin, (req: Authe
 });
 
 // Criar / Cadastrar manualmente conta do Instagram com pasta mapeada do Drive
+// ---------------------------------------------------------------------------------------------
+// ADMIN: usuários/empresas e contas Instagram (áreas separadas). Tudo lido/gravado direto no PostgreSQL:
+// nenhuma dependência de Google Drive, Meta ou do estado em memória. Tempos registrados sem dados pessoais.
+// ---------------------------------------------------------------------------------------------
+const adminHandler =
+  (label: string, fn: (req: AuthenticatedRequest, res: Response) => Promise<any>) =>
+  async (req: AuthenticatedRequest, res: Response) => {
+    const t0 = Date.now();
+    res.setHeader('Cache-Control', 'no-store');
+    try {
+      await fn(req, res);
+    } catch (err: any) {
+      if (err instanceof MembershipError) {
+        res.status(err.status).json({ error: err.message, code: err.code });
+      } else {
+        console.error(`[admin] ${label} falhou:`, err?.message || err);
+        res.status(500).json({ error: 'Não foi possível concluir a operação. Tente novamente.', code: 'ADMIN_OPERATION_FAILED' });
+      }
+    } finally {
+      console.log(`[admin] ${label} ${Date.now() - t0}ms status=${res.statusCode}`);
+    }
+  };
+const touchRevoked = (userId: string) => markUserSessionsRevoked(userId);
+
+app.get('/api/admin/users', requireAuth, requireAdmin, adminHandler('GET users', async (_req, res) => {
+  const [users, companies] = await Promise.all([listUsersForAdmin(), listCompaniesForAdmin()]);
+  res.json({ users, companies, generatedAt: new Date().toISOString() });
+}));
+app.post('/api/admin/users/:id/approve', requireAuth, requireAdmin, adminHandler('POST users/approve', async (req, res) => {
+  const r = await approveUser(req.user!.id, String(req.params.id), { companyId: req.body?.companyId, newCompanyName: req.body?.newCompanyName, role: req.body?.role });
+  res.json({ success: true, companyId: r.companyId, message: 'Usuário aprovado e vinculado à empresa.' });
+}));
+app.post('/api/admin/users/:id/reject', requireAuth, requireAdmin, adminHandler('POST users/reject', async (req, res) => {
+  await rejectUser(req.user!.id, String(req.params.id), req.body?.reason);
+  touchRevoked(String(req.params.id));
+  res.json({ success: true, message: 'Cadastro rejeitado.' });
+}));
+app.post('/api/admin/users/:id/suspend', requireAuth, requireAdmin, adminHandler('POST users/suspend', async (req, res) => {
+  await suspendUser(req.user!.id, String(req.params.id), req.body?.reason);
+  touchRevoked(String(req.params.id));
+  res.json({ success: true, message: 'Usuário suspenso. As sessões abertas foram encerradas.' });
+}));
+app.post('/api/admin/users/:id/reactivate', requireAuth, requireAdmin, adminHandler('POST users/reactivate', async (req, res) => {
+  const r = await reactivateUser(req.user!.id, String(req.params.id));
+  res.json({ success: true, accessStatus: r.accessStatus, message: r.accessStatus === 'ACTIVE' ? 'Usuário reativado.' : 'Usuário voltou para a fila de aprovação.' });
+}));
+app.post('/api/admin/users/:id/company', requireAuth, requireAdmin, adminHandler('POST users/company', async (req, res) => {
+  await changeUserCompany(req.user!.id, String(req.params.id), req.body?.companyId, req.body?.role);
+  res.json({ success: true, message: 'Empresa alterada. O acesso à empresa anterior foi removido.' });
+}));
+app.post('/api/admin/users/:id/role', requireAuth, requireAdmin, adminHandler('POST users/role', async (req, res) => {
+  await changeUserRole(req.user!.id, String(req.params.id), req.body?.role);
+  res.json({ success: true, message: 'Papel atualizado.' });
+}));
+app.delete('/api/admin/users/:id/company', requireAuth, requireAdmin, adminHandler('DELETE users/company', async (req, res) => {
+  await removeUserCompany(req.user!.id, String(req.params.id));
+  res.json({ success: true, message: 'Vínculo com a empresa removido.' });
+}));
+app.delete('/api/admin/users/:id', requireAuth, requireAdmin, adminHandler('DELETE users', async (req, res) => {
+  await deleteUser(req.user!.id, String(req.params.id), req.body?.confirmEmail ?? req.query.confirmEmail);
+  touchRevoked(String(req.params.id));
+  res.json({ success: true, message: 'Usuário excluído. Empresa, posts e contas do Instagram foram preservados.' });
+}));
+app.get('/api/admin/instagram-accounts', requireAuth, requireAdmin, adminHandler('GET instagram-accounts', async (_req, res) => {
+  res.json({ accounts: await listInstagramForAdmin(), generatedAt: new Date().toISOString() });
+}));
+app.post('/api/admin/instagram-accounts/:id/link-company', requireAuth, requireAdmin, adminHandler('POST instagram/link', async (req, res) => {
+  await linkInstagramToCompany(req.user!.id, String(req.params.id), req.body?.companyId);
+  res.json({ success: true, message: 'Conta vinculada à empresa.' });
+}));
+app.post('/api/admin/instagram-accounts/:id/disconnect', requireAuth, requireAdmin, adminHandler('POST instagram/disconnect', async (req, res) => {
+  await disconnectInstagram(req.user!.id, String(req.params.id));
+  res.json({ success: true, message: 'Autorização do Instagram revogada. Nenhum usuário foi alterado.' });
+}));
+
 app.post('/api/tenants', requireAuth, requireAdmin, (req: AuthenticatedRequest, res: Response) => {
   const { JWT_SECRET } = getEnv();
   const encKey = getTokenEncryptionKey() || JWT_SECRET;

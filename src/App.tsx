@@ -7,6 +7,8 @@ import { AuthLinkPage, resolveAuthLinkRoute } from './components/auth/AuthLinkPa
 import { OnboardingView } from './components/auth/OnboardingView.tsx';
 import { Header } from './components/Header.tsx';
 import { AdminTenantsView } from './components/AdminTenantsView.tsx';
+import { AdminUsersView } from './components/AdminUsersView.tsx';
+import { PendingBlock, PendingDashboard } from './components/user/PendingApproval.tsx';
 import { FilterBar, FilterTab } from './components/FilterBar.tsx';
 import { PostCard } from './components/PostCard.tsx';
 import { ApprovalModal } from './components/ApprovalModal.tsx';
@@ -48,7 +50,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
 
   // Admin View State: Manage Tenants vs Approval Dashboard
-  const [adminView, setAdminView] = useState<'ADMIN_TENANTS' | 'APPROVAL_DASHBOARD'>('ADMIN_TENANTS');
+  const [adminView, setAdminView] = useState<'ADMIN_USERS' | 'ADMIN_TENANTS' | 'APPROVAL_DASHBOARD'>('ADMIN_USERS');
   // Visão da área do usuário (TENANT): dashboard, posts, agenda, memória e conta
   const [userView, setUserView] = useState<UserView>('dashboard');
   const [previewTenant, setPreviewTenant] = useState<TenantAccount | null>(null);
@@ -247,7 +249,7 @@ export default function App() {
     setUser(loggedInUser);
     setPreviewTenant(null);
     if (loggedInUser.role === 'ADMIN') {
-      setAdminView('ADMIN_TENANTS');
+      setAdminView('ADMIN_USERS');
       setSelectedCompany('ALL');
     } else {
       setAdminView('APPROVAL_DASHBOARD');
@@ -555,6 +557,29 @@ export default function App() {
     );
   }
 
+  // Cadastro confirmado, ainda sem aprovação (ou rejeitado): só dashboard inicial, Conta e conexão do Instagram.
+  // A trava real está no backend; aqui só se escolhe o que mostrar.
+  if (user.role === 'TENANT' && user.accessStatus && user.accessStatus !== 'ACTIVE') {
+    return (
+      <UserLayout user={user} view={userView} onChangeView={setUserView} onLogout={handleLogout}>
+        {userView === 'dashboard' && (
+          <PendingDashboard
+            user={user}
+            onSessionLost={handleLogout}
+            onApproved={(approved) => {
+              setUser(approved);
+              setUserView('dashboard');
+              loadPosts();
+              showNotification('success', 'Acesso liberado!');
+            }}
+          />
+        )}
+        {userView === 'conta' && <AccountView user={user} onAccountDeleted={handleLogout} />}
+        {userView !== 'dashboard' && userView !== 'conta' && <PendingBlock status={user.accessStatus} />}
+      </UserLayout>
+    );
+  }
+
   const effectiveTenantFolderName =
     activeTenant?.driveFolderName ||
     (user.driveFolderName && user.driveFolderName.toLowerCase() !== 'ato social midia'
@@ -597,7 +622,11 @@ export default function App() {
           <div role="alert" className="mb-4 p-3 bg-[#121212] border border-[#F59E0B]/40 rounded-lg flex items-center justify-between gap-3 text-xs text-[#C8C8CC]">
             <span>
               {!user.instagramUsername || user.instagramUsername.toLowerCase().startsWith('cadastro_') || user.connectionStatus === 'DESCONECTADO'
-                ? 'Conecte sua conta profissional do Instagram para poder publicar.'
+                ? user.workspaceRole === 'MEMBER'
+                  ? 'O Instagram da empresa ainda não está conectado. Peça ao responsável da empresa ou ao administrador.'
+                  : 'Conecte a conta profissional do Instagram da empresa para poder publicar.'
+                : user.workspaceRole === 'MEMBER'
+                ? 'A conexão do Instagram da empresa precisa ser renovada. Avise o responsável da empresa ou o administrador.'
                 : 'A conexão com o Instagram precisa ser renovada para publicar.'}
             </span>
             <button
@@ -659,7 +688,9 @@ export default function App() {
 
       {/* Main Content */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 md:px-8 py-8">
-        {showAdminTenants ? (
+        {isAdmin && adminView === 'ADMIN_USERS' ? (
+          <AdminUsersView />
+        ) : showAdminTenants ? (
           <AdminTenantsView
             currentUser={user}
             onSelectTenantToPreview={handleSelectTenantToPreview}

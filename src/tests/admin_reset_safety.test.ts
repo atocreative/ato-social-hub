@@ -38,6 +38,7 @@ describe('Reset administrativo de registros de teste: ação explícita e alcanc
     await new Promise<void>((r) => server.listen(0, '127.0.0.1', () => r()));
     baseUrl = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
     await dbQuery(`INSERT INTO companies (id, name, drive_folder_name) VALUES ('co_reset', 'Empresa Reset', 'pasta_reset') ON CONFLICT DO NOTHING`);
+    await dbQuery(`INSERT INTO users (id, email, name, password_hash, role, status) VALUES ('usr_x', 't@x.com', 'T', 'x', 'TENANT', 'APROVADO') ON CONFLICT DO NOTHING`);
     await seedPost('p_erro', 'ERRO', null);
     await seedPost('p_agendado', 'AGENDADO', null);
     await seedPost('p_publicado', 'POSTADO', '17900000000000001');

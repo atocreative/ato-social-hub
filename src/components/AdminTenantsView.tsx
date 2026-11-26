@@ -78,28 +78,29 @@ export const AdminTenantsView: React.FC<AdminTenantsViewProps> = ({
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    try {
-      const [tenantsRes, foldersRes] = await Promise.all([
-        api.getTenants(),
-        api.getDriveFolders(),
-      ]);
-      setTenants(tenantsRes.tenants);
-      setAdminAlerts(Array.isArray(tenantsRes.adminAlerts) ? tenantsRes.adminAlerts : []);
-      setAvailableFolders(foldersRes.folders);
-
-      if (foldersRes.folderDetails) {
+    // Contas e pastas do Drive são independentes: a falha ou demora do Drive nunca esconde as contas (antes, um
+    // Promise.all rejeitado deixava a lista vazia) e a verificação de integrações roda por fora, sem segurar a tela.
+    const [tenantsRes, foldersRes] = await Promise.allSettled([api.getTenants(), api.getDriveFolders()]);
+    if (tenantsRes.status === 'fulfilled') {
+      setTenants(tenantsRes.value.tenants);
+      setAdminAlerts(Array.isArray(tenantsRes.value.adminAlerts) ? tenantsRes.value.adminAlerts : []);
+    } else {
+      notify('error', (tenantsRes.reason as any)?.message || 'Não foi possível carregar a lista de contas.');
+    }
+    if (foldersRes.status === 'fulfilled') {
+      setAvailableFolders(foldersRes.value.folders);
+      if (foldersRes.value.folderDetails) {
         const map: Record<string, string> = {};
-        for (const item of foldersRes.folderDetails) {
+        for (const item of foldersRes.value.folderDetails) {
           map[item.nome] = item.id;
         }
         setFolderDetailsMap(map);
       }
-      await loadIntegrationsStatus();
-    } catch (err: any) {
-      notify('error', err.message || 'Erro ao carregar lista de contas e pastas.');
-    } finally {
-      setLoading(false);
+    } else if (tenantsRes.status === 'fulfilled') {
+      notify('info', 'As pastas do Google Drive não responderam. As contas foram carregadas normalmente.');
     }
+    setLoading(false);
+    void loadIntegrationsStatus();
   }, [loadIntegrationsStatus]);
 
   useEffect(() => {

@@ -132,6 +132,11 @@ describe('Unified Login — segurança de autenticação, vínculo por ID e isol
       approvedAt: new Date().toISOString(),
       ...over.extra,
     } as any);
+    // Usuário real vinculado à conta (o portão de acesso lê o vínculo no banco; token de usuário inexistente é recusado).
+    await dbQuery(
+      `INSERT INTO users (id, email, name, password_hash, role, status, instagram_account_id) VALUES ($1,$2,$3,'x','TENANT','APROVADO',$4) ON CONFLICT (id) DO NOTHING`,
+      [`usr_${id}`, `${id}@seed.test`, id, id]
+    );
   }
 
   beforeAll(async () => {
@@ -485,10 +490,8 @@ describe('Unified Login — segurança de autenticação, vínculo por ID e isol
   // Jornada completa: cadastro -> aprovação -> login (e-mail/senha) -> conexão do Instagram
   // ------------------------------------------------------------------
   describe('Jornada do cliente: autenticação no Social Hub separada da autorização do Instagram', () => {
-    it('cadastro com e-mail confirmado e espaço de trabalho; a conexão do Instagram só ocorre depois, na empresa do próprio usuário', async () => {
-      // O antigo /api/auth/register criava sessão sem confirmar o e-mail e dependia de aprovação manual.
-      // O cadastro público agora confirma o e-mail e cria o espaço de trabalho; o que o teste garante continua igual:
-      // autenticar no Social Hub é uma etapa e autorizar o Instagram é outra, sempre dentro da empresa do usuário.
+    it('cadastro confirmado fica aguardando aprovação; o administrador aprova com empresa nova; só então o Instagram é conectado, na empresa', async () => {
+      // Autenticar no Social Hub, ser aprovado pelo administrador e autorizar o Instagram são etapas distintas.
       resetGraph();
       const suffix = Date.now();
       const email = `cliente.${suffix}@empresa.com.br`;
@@ -504,30 +507,87 @@ describe('Unified Login — segurança de autenticação, vínculo por ID e isol
         const link = mails.find((m) => m.to === email)!.text.match(/https?:\/\/\S+/)![0];
         const verified = await req('/api/auth/verify-email', { method: 'POST', body: { token: new URL(link).searchParams.get('code') } });
         expect(verified.status).toBe(200);
+        expect(verified.body.user.accessStatus).toBe('PENDING_APPROVAL');
+        expect(verified.body.user.tenantId).toBeUndefined();
+        // Não existe mais autoconcessão de empresa.
         const ws = await req('/api/workspaces', { method: 'POST', token: verified.body.token, body: { companyName: `Clinica ${suffix}` } });
-        expect(ws.status).toBe(201);
-        expect(ws.body.user.connectionStatus).toBe('DESCONECTADO');
-        const tenantId = ws.body.user.tenantId;
+        expect(ws.status).toBe(403);
+        const userId = verified.body.user.id;
 
-        // Login por e-mail e senha (senha errada é recusada).
+        const ap = await req(`/api/admin/users/${userId}/approve`, { method: 'POST', token: adminUser(), body: { newCompanyName: `Clinica ${suffix}`, role: 'OWNER' } });
+        expect(ap.status).toBe(200);
+
         const bad = await req('/api/auth/login', { method: 'POST', body: { email, password: 'senhaErrada' } });
         expect(bad.status).toBe(401);
         const login = await req('/api/auth/login', { method: 'POST', body: { email, password: 'Senha-Segura-123' } });
         expect(login.status).toBe(200);
-        expect(login.body.user.tenantId).toBe(tenantId);
+        expect(login.body.user.accessStatus).toBe('ACTIVE');
+        const tenantId = login.body.user.tenantId;
+        expect(tenantId).toBeTruthy();
 
-        // Só agora autoriza o Instagram, com a sessão do Social Hub.
         const { state, cookie } = await startFlow(login.body.token);
         const cb = await callback(state, cookie);
         expect(cb.status).toBe(200);
         expect(cb.body.token).toBeUndefined();
         const acc = await getInstagramAccountByIdOrUser(tenantId);
         expect(acc?.connectionStatus).toBe('CONECTADO');
-        expect(acc?.companyId).toBe(ws.body.user.companyId);
+        expect(acc?.companyId).toBe(ap.body.companyId);
         expect(acc?.instagramUserId).toBe(graph.accounts[0].id);
       } finally {
         setMailTransportForTests(null);
       }
+    }, 30000);
+
+    it('J. usuário aguardando aprovação conecta o PRÓPRIO Instagram: fica como conexão pessoal e não ganha acesso a empresa alguma', async () => {
+      resetGraph();
+      const uid = `usr_pend_ig_${Date.now()}`;
+      await dbQuery(`INSERT INTO users (id,email,name,password_hash,role,status) VALUES ($1,$2,'Pendente IG','x','TENANT','AGUARDANDO_APROVACAO')`, [uid, `${uid}@seed.test`]);
+      await dbQuery(`INSERT INTO memberships (id,user_id,status) VALUES ($1,$2,'PENDING_APPROVAL')`, [`mem_${uid}`, uid]);
+      const token = jwt.sign({ id: uid, nome: 'Pendente IG', role: 'TENANT' } as any, JWT, { expiresIn: '1h' });
+
+      const { state, cookie } = await startFlow(token);
+      const cb = await callback(state, cookie);
+      expect(cb.status).toBe(200);
+      expect(cb.body.token).toBeUndefined();
+
+      const ig = (await dbQuery<any>(`SELECT id, company_id, connected_by_user_id, connection_status FROM instagram_accounts WHERE instagram_user_id=$1`, [graph.accounts[0].id])).rows[0];
+      expect(ig.company_id).toBeNull(); // sem empresa
+      expect(ig.connected_by_user_id).toBe(uid);
+      expect(ig.connection_status).toBe('CONECTADO');
+      const u = (await dbQuery<any>(`SELECT company_id, instagram_account_id FROM users WHERE id=$1`, [uid])).rows[0];
+      expect(u).toEqual({ company_id: null, instagram_account_id: null }); // o vínculo operacional continua vazio
+
+      // o Instagram conectado NÃO abre nenhuma área operacional
+      for (const rota of ['/api/posts', '/api/tenants', '/api/observations']) {
+        const r = await req(rota, { token });
+        expect(r.status, rota).toBe(403);
+        expect(r.body.code).toBe('PENDING_APPROVAL');
+      }
+      const me = await req('/api/auth/me', { token });
+      expect(me.status).toBe(200);
+      expect(me.body.user.accessStatus).toBe('PENDING_APPROVAL');
+      expect(me.body.user.personalInstagram).toEqual({ username: graph.accounts[0].username, connected: true });
+    }, 30000);
+
+    it('J. usuário pendente não consegue conectar uma conta Instagram que já pertence a uma empresa (a conexão da empresa não muda)', async () => {
+      resetGraph();
+      await seedTenant('tenant_ato_conectada', { driveFolderName: 'ATO Conectada', username: 'ato_real', instagramUserId: graph.accounts[0].id, connectionStatus: 'CONECTADO', hasValidToken: true });
+      await dbQuery(`INSERT INTO companies (id,name,drive_folder_name) VALUES ('company_ato_conectada','ATO Conectada Ltda','ATO Conectada') ON CONFLICT DO NOTHING`);
+      await dbQuery(`UPDATE instagram_accounts SET company_id='company_ato_conectada', encrypted_access_token='token-da-empresa' WHERE id='tenant_ato_conectada'`);
+      const antes = (await dbQuery<any>(`SELECT company_id, encrypted_access_token, username, connected_by_user_id FROM instagram_accounts WHERE id='tenant_ato_conectada'`)).rows[0];
+
+      const uid = `usr_pend_ig2_${Date.now()}`;
+      await dbQuery(`INSERT INTO users (id,email,name,password_hash,role,status) VALUES ($1,$2,'Pendente 2','x','TENANT','AGUARDANDO_APROVACAO')`, [uid, `${uid}@seed.test`]);
+      await dbQuery(`INSERT INTO memberships (id,user_id,status) VALUES ($1,$2,'PENDING_APPROVAL')`, [`mem_${uid}`, uid]);
+      const token = jwt.sign({ id: uid, nome: 'Pendente 2', role: 'TENANT' } as any, JWT, { expiresIn: '1h' });
+
+      const { state, cookie } = await startFlow(token);
+      const cb = await callback(state, cookie);
+      expect(cb.status).toBe(403);
+      expect(cb.body.reason_code).toBe('CROSS_TENANT_VIOLATION');
+      const depois = (await dbQuery<any>(`SELECT company_id, encrypted_access_token, username, connected_by_user_id FROM instagram_accounts WHERE id='tenant_ato_conectada'`)).rows[0];
+      expect(depois).toEqual(antes);
+      expect((await dbQuery<any>(`SELECT instagram_account_id FROM users WHERE id=$1`, [uid])).rows[0].instagram_account_id).toBeNull();
     }, 30000);
 
     it('espaço de trabalho sem Instagram: pode revisar e aprovar, mas agendar e publicar são bloqueados no servidor', async () => {
