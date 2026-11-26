@@ -1491,7 +1491,8 @@ export function requireWebhookOrUserAuth(req: AuthenticatedRequest, res: Respons
   if (token) {
     try {
       const decoded = jwt.verify(token, JWT_SECRET) as UserProfile;
-      if (!isSessionRevoked(decoded as any)) {
+      // O webhook grava posts no sistema: por JWT só o administrador (cliente nunca), e fora de sessões revogadas.
+      if (!isSessionRevoked(decoded as any) && decoded?.role === 'ADMIN') {
         req.user = decoded;
         return next();
       }
@@ -3569,11 +3570,28 @@ app.post('/api/admin/integrations/test/gemini', requireAuth, requireAdmin, async
 // ----------------------------------------------------
 // 3. LISTAGEM DE POSTS & SINCRONIZAÇÃO COM GOOGLE APPS SCRIPT
 // ----------------------------------------------------
+// Cliente (TENANT) só conhece o nome da própria pasta: a lista de pastas dos demais clientes é interna.
+function scopeFoldersForUser(
+  user: UserProfile | undefined,
+  all: { folders: string[]; folderDetails: Array<{ id: string; nome: string; url?: string }> }
+): { folders: string[]; folderDetails: Array<{ id: string; nome: string; url?: string }> } {
+  if (!user || user.role !== 'TENANT') return all;
+  const own = tenants.find((t) => t.id === user.tenantId);
+  const name = (own?.driveFolderName || user.driveFolderName || '').trim().toLowerCase();
+  if (!name) return { folders: [], folderDetails: [] };
+  return {
+    folders: all.folders.filter((f) => String(f).trim().toLowerCase() === name),
+    folderDetails: all.folderDetails.filter((d) => String(d.nome).trim().toLowerCase() === name),
+  };
+}
+
 app.get('/api/posts', requireAuth, async (req: AuthenticatedRequest, res: Response) => {
   loadDatabaseFromDisk();
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
   const user = req.user!;
-  const { folders: availableFolders, folderDetails } = getKnownFoldersList();
+  const scopedFolders = scopeFoldersForUser(user, getKnownFoldersList());
+  const availableFolders = scopedFolders.folders;
+  const folderDetails = scopedFolders.folderDetails;
   let filteredPosts = [...postGroups];
 
   // Identifica mídias ocultadas individualmente pelo usuário atual
@@ -3748,7 +3766,7 @@ app.get('/api/posts', requireAuth, async (req: AuthenticatedRequest, res: Respon
 });
 
 // Listar pastas de empresas do Google Drive (via POST SINCRONIZAR_TUDO / LISTAR_PASTAS_CLIENTES no GOOGLE_APPS_SCRIPT_URL)
-app.get('/api/drive/folders', requireAuth, async (_req: AuthenticatedRequest, res: Response) => {
+app.get('/api/drive/folders', requireAuth, requireAdmin, async (_req: AuthenticatedRequest, res: Response) => {
   const syncResult = await syncWithAppsScript('SINCRONIZAR_TUDO');
   const { folders, folderDetails } = getKnownFoldersList();
   return res.json({
@@ -3767,6 +3785,9 @@ app.post('/api/posts/sync-drive', requireAuth, async (_req: AuthenticatedRequest
   const { folders, folderDetails } = getKnownFoldersList();
 
   if (!syncResult.ok) {
+    if (_req.user?.role === 'TENANT') {
+      return res.status(502).json({ success: false, error: 'Não foi possível atualizar agora. Tente novamente.' });
+    }
     return res.status(502).json({
       success: false,
       error: syncResult.error || 'Falha ao sincronizar com o Google Apps Script.',
@@ -3801,6 +3822,11 @@ app.post('/api/posts/sync-drive', requireAuth, async (_req: AuthenticatedRequest
       success: false,
       error: 'Os conteúdos do Drive foram lidos, mas não foi possível salvar no sistema. Tente de novo.',
     });
+  }
+
+  if (_req.user?.role === 'TENANT') {
+    // O cliente aciona a atualização, mas só recebe a confirmação: pastas, lotes e arquivos são de todos os clientes.
+    return res.json({ success: true, sucesso: true, message: 'Atualização concluída.', totalPosts: 0, timestamp: new Date().toISOString() });
   }
 
   return res.json({
@@ -6603,6 +6629,9 @@ function requireSchedulerOrAdminAuth(req: AuthenticatedRequest, res: Response, n
     }
     try {
       const decoded = jwt.verify(bearer, JWT_SECRET) as UserProfile;
+      if (isSessionRevoked(decoded as any) || decoded?.role !== 'ADMIN') {
+        return res.status(401).json({ error: 'Token de autorização inválido para o agendador.' });
+      }
       req.user = decoded;
       return next();
     } catch {
@@ -6611,7 +6640,7 @@ function requireSchedulerOrAdminAuth(req: AuthenticatedRequest, res: Response, n
   }
 
   // Permite disparo sem token apenas se nenhum segredo estiver configurado no ambiente
-  if (!cronSecret) {
+  if (!cronSecret && process.env.NODE_ENV !== 'production') {
     return next();
   }
 
@@ -6701,7 +6730,7 @@ app.post('/api/admin/tenants/:id/refresh-token', requireAuth, requireAdmin, asyn
 });
 
 // Endpoint para diagnóstico e status do agendador e alertas administrativos
-app.get('/api/scheduler/status', requireAuth, async (_req: AuthenticatedRequest, res: Response) => {
+app.get('/api/scheduler/status', requireAuth, requireAdmin, async (_req: AuthenticatedRequest, res: Response) => {
   loadDatabaseFromDisk();
   const scheduledPosts = postGroups.filter(
     (p) =>
@@ -6746,7 +6775,7 @@ app.post('/api/admin/alerts/:id/resolve', requireAuth, requireAdmin, (req: Authe
 // ----------------------------------------------------
 // 7. GOOGLE APPS SCRIPT CONFIG & SERVICE TOKEN GENERATOR
 // ----------------------------------------------------
-app.get('/api/system/gas-config', requireAuth, (req: AuthenticatedRequest, res: Response) => {
+app.get('/api/system/gas-config', requireAuth, requireAdmin, (req: AuthenticatedRequest, res: Response) => {
   const {
     APP_URL,
     JWT_SECRET,
@@ -6759,20 +6788,11 @@ app.get('/api/system/gas-config', requireAuth, (req: AuthenticatedRequest, res: 
   const currentOrigin = APP_URL || `${req.protocol}://${req.get('host')}`;
   const webhookEndpoint = `${currentOrigin}/api/webhooks/drive-sync`;
 
-  const tenYearJwt = jwt.sign(
-    {
-      id: 'gas_long_lived_service',
-      email: 'drive-sync@atosocial.com',
-      role: 'ADMIN',
-    },
-    JWT_SECRET,
-    { expiresIn: '3650d' }
-  );
-
+  // Nenhum token administrativo e nenhum segredo sai desta rota: o Apps Script guarda o próprio WEBHOOK_SECRET_TOKEN
+  // (propriedade do script) e o valor de referência fica apenas nas variáveis do servidor.
   return res.json({
     webhookUrl: webhookEndpoint,
-    webhookSecretToken: WEBHOOK_SECRET_TOKEN,
-    tenYearJwt,
+    webhookSecretConfigured: Boolean(WEBHOOK_SECRET_TOKEN),
     gasWebhookUrl: GOOGLE_APPS_SCRIPT_URL,
     gasProjectUrl: 'https://script.google.com/home/projects/1ldr5Fxf3ikysc2oxOhyBFYrpy6xXkkkzWJtic41k1WfXaQbjpw9z8Fdl/edit?hl=pt-br',
     instagramConnectedAccount: {
