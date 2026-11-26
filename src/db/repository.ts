@@ -377,7 +377,10 @@ export async function upsertUserForInstagramAccount(
     `SELECT id FROM users WHERE id = $1 OR instagram_account_id = $2 OR LOWER(email) = LOWER($3) LIMIT 1`,
     [`usr_${tenant.id}`, tenant.id, syntheticEmail]
   );
-  const userId = existingRes.rows[0]?.id || `usr_${tenant.id}`;
+  // Conectar um Instagram NÃO cria mais usuário: antes cada conexão gerava um "usuário técnico" sem senha que
+  // aparecia como cadastro aguardando aprovação. Só registros que já existem continuam sendo atualizados.
+  if (existingRes.rows.length === 0) return;
+  const userId = existingRes.rows[0].id;
 
   await runner(
     `

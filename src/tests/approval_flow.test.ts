@@ -349,6 +349,18 @@ describe('Segurança adicional', () => {
     expect(crypto.randomUUID()).toBeTruthy();
   });
 
+  it('conectar um Instagram nunca cria "usuário" aguardando aprovação (só pessoas cadastradas aparecem na fila)', async () => {
+    const { upsertInstagramAccount } = await import('../db/repository.ts');
+    const antes = (await dbQuery<any>(`SELECT count(*)::int n FROM users`)).rows[0].n;
+    await upsertInstagramAccount({
+      id: 'tenant_so_ig_x', username: 'so_ig_x', nome: 'So IG', instagramUserId: '17841400099555', account_type: 'BUSINESS', driveFolderName: null,
+      status: 'AGUARDANDO_APROVACAO', connectionStatus: 'CONECTADO', hasValidToken: true, requestedAt: new Date().toISOString(),
+    } as any);
+    expect((await dbQuery<any>(`SELECT count(*)::int n FROM users`)).rows[0].n).toBe(antes);
+    const fila = (await lista()).users.filter((u: any) => u.accessStatus === 'PENDING_APPROVAL' && u.email.endsWith('@instagram.ato.hub'));
+    expect(fila).toHaveLength(0);
+  });
+
   it('o cadastro nunca cria empresa nem conta Instagram sozinho', async () => {
     const empresasAntes = (await dbQuery<any>(`SELECT count(*)::int n FROM companies`)).rows[0].n;
     const contasAntes = (await dbQuery<any>(`SELECT count(*)::int n FROM instagram_accounts`)).rows[0].n;

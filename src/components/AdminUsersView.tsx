@@ -100,6 +100,7 @@ export const AdminUsersView: React.FC = () => {
   const [busy, setBusy] = useState(false);
   const [filter, setFilter] = useState<'ALL' | AccessStatus>('ALL');
   const [query, setQuery] = useState('');
+  const [showTech, setShowTech] = useState(false);
 
   const companies: AdminCompanyRow[] = users.state.data?.companies || [];
 
@@ -121,18 +122,21 @@ export const AdminUsersView: React.FC = () => {
   };
 
   const list = useMemo(() => {
-    const all = users.state.data?.users || [];
+    // Registros técnicos de conexões antigas do Instagram não são pessoas: ficam fora da lista, a não ser que se peça.
+    const all = (users.state.data?.users || []).filter((u) => showTech || u.origin !== 'INSTAGRAM_LEGACY');
     const q = query.trim().toLowerCase();
     return all.filter((u) => (filter === 'ALL' || u.accessStatus === filter) && (!q || u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)));
-  }, [users.state.data, filter, query]);
+  }, [users.state.data, filter, query, showTech]);
+  const techCount = (users.state.data?.users || []).filter((u) => u.origin === 'INSTAGRAM_LEGACY').length;
   const counts = useMemo(() => {
     const c: Record<string, number> = { ALL: 0, PENDING_APPROVAL: 0, ACTIVE: 0, SUSPENDED: 0, REJECTED: 0 };
     for (const u of users.state.data?.users || []) {
+      if (!showTech && u.origin === 'INSTAGRAM_LEGACY') continue;
       c.ALL++;
       c[u.accessStatus]++;
     }
     return c;
-  }, [users.state.data]);
+  }, [users.state.data, showTech]);
 
   const stamp = (s: LoadState<unknown>) => (s.at ? `Atualizado às ${s.at.toLocaleTimeString('pt-BR')}${s.ms !== undefined ? ` · ${s.ms} ms` : ''}` : '');
 
@@ -176,7 +180,14 @@ export const AdminUsersView: React.FC = () => {
             <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar nome ou e-mail" aria-label="Buscar usuário" className={`${field} max-w-[240px] ml-auto`} />
             <button type="button" className={btnGhost} onClick={() => void users.reload()}>Atualizar</button>
           </div>
-          <p className="text-[11px] text-[#6B6B70]">{stamp(users.state)}</p>
+          <p className="text-[11px] text-[#6B6B70]">
+            {stamp(users.state)}
+            {techCount > 0 && (
+              <button type="button" onClick={() => setShowTech((v) => !v)} className="ml-3 underline underline-offset-2 hover:text-white cursor-pointer">
+                {showTech ? 'Ocultar' : 'Mostrar'} {techCount} registro(s) técnico(s) de conexões antigas do Instagram
+              </button>
+            )}
+          </p>
 
           {users.state.phase === 'loading' && !users.state.data && <p className="text-sm text-[#8E8E93] py-8 text-center">Carregando usuários…</p>}
           {users.state.phase === 'error' && (
@@ -338,11 +349,9 @@ const CompanyDialog: React.FC<{
   onClose: () => void;
   onSubmit: (p: { companyId?: string; newCompanyName?: string; role: 'OWNER' | 'MEMBER' }) => void;
 }> = ({ mode, user, companies, busy, onClose, onSubmit }) => {
-  const [choice, setChoice] = useState<string>(mode === 'company' && user.companyId ? user.companyId : companies[0]?.id || '__new__');
-  const [newName, setNewName] = useState('');
+  const [choice, setChoice] = useState<string>(mode === 'company' && user.companyId ? user.companyId : companies[0]?.id || '');
   const [role, setRole] = useState<'OWNER' | 'MEMBER'>(user.workspaceRole || 'MEMBER');
-  const creating = choice === '__new__';
-  const valid = creating ? newName.trim().length >= 2 : Boolean(choice);
+  const valid = Boolean(choice);
   return (
     <Modal title={mode === 'approve' ? `Aprovar ${user.name}` : `Alterar empresa de ${user.name}`} onClose={onClose}>
       <div className="space-y-3">
@@ -352,15 +361,9 @@ const CompanyDialog: React.FC<{
             {companies.map((c) => (
               <option key={c.id} value={c.id}>{c.name}{c.instagramConnected ? ' · Instagram conectado' : ''}</option>
             ))}
-            {mode === 'approve' && <option value="__new__">+ Criar nova empresa…</option>}
           </select>
+          {companies.length === 0 && <p className="text-[11px] text-[#F59E0B] mt-1.5">Nenhuma empresa encontrada. As empresas vêm das pastas do Google Drive: use "Atualizar Posts" e tente de novo.</p>}
         </div>
-        {creating && (
-          <div>
-            <label className="block text-xs text-[#8E8E93] mb-1.5" htmlFor="co-new">Nome da nova empresa</label>
-            <input id="co-new" className={field} value={newName} onChange={(e) => setNewName(e.target.value)} maxLength={120} placeholder="Ex.: Padaria Central" />
-          </div>
-        )}
         <div>
           <label className="block text-xs text-[#8E8E93] mb-1.5" htmlFor="co-role">Papel na empresa</label>
           <select id="co-role" className={field} value={role} onChange={(e) => setRole(e.target.value as 'OWNER' | 'MEMBER')}>
@@ -371,12 +374,12 @@ const CompanyDialog: React.FC<{
         <p className="text-[11px] text-[#6B6B70]">
           {mode === 'company'
             ? 'O acesso à empresa anterior termina na próxima requisição do usuário. Nada é apagado.'
-            : 'O usuário passa a ver os conteúdos permitidos ao papel, sem precisar conectar o Instagram pessoal. A conta da empresa não é alterada.'}
+            : 'O usuário passa a ver os conteúdos da empresa. O Instagram é o próprio usuário quem conecta (ou já está conectado na empresa); você não aprova Instagram.'}
         </p>
         <div className="flex justify-end gap-2 pt-1">
           <button type="button" className={btnGhost} onClick={onClose}>Cancelar</button>
           <button type="button" className={btnPrimary} disabled={busy || !valid}
-            onClick={() => onSubmit(creating ? { newCompanyName: newName.trim(), role } : { companyId: choice, role })}>
+            onClick={() => onSubmit({ companyId: choice, role })}>
             {busy ? 'Salvando…' : mode === 'approve' ? 'Aprovar e vincular' : 'Alterar empresa'}
           </button>
         </div>

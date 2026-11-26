@@ -134,7 +134,7 @@ describe('Unified Login — segurança de autenticação, vínculo por ID e isol
     } as any);
     // Usuário real vinculado à conta (o portão de acesso lê o vínculo no banco; token de usuário inexistente é recusado).
     await dbQuery(
-      `INSERT INTO users (id, email, name, password_hash, role, status, instagram_account_id) VALUES ($1,$2,$3,'x','TENANT','APROVADO',$4) ON CONFLICT (id) DO NOTHING`,
+      `INSERT INTO users (id, email, name, password_hash, role, status, instagram_account_id) VALUES ($1,$2,$3,NULL,'TENANT','APROVADO',$4) ON CONFLICT (id) DO NOTHING`,
       [`usr_${id}`, `${id}@seed.test`, id, id]
     );
   }

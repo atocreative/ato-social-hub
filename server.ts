@@ -2632,7 +2632,7 @@ async function linkInstagramAccountToCompany(params: {
     );
     const hit = owned.rows[0];
     if (hit && (hit.company_id || (hit.connected_by_user_id && hit.connected_by_user_id !== state.userId))) {
-      return { ok: false, status: 403, reasonCode: 'CROSS_TENANT_VIOLATION', userMessage: 'Esta conta do Instagram já está vinculada a outra empresa ou usuário.', step: '3_BLOQUEIO_CONTA_JA_VINCULADA' };
+      return { ok: false, status: 403, reasonCode: 'CROSS_TENANT_VIOLATION', userMessage: 'Este Instagram já está vinculado a outra conta do ATO Social Hub.', step: '3_BLOQUEIO_CONTA_JA_VINCULADA' };
     }
     try {
       const savedPersonal = await TokenService.persistValidatedAccountToken({
@@ -2656,7 +2656,7 @@ async function linkInstagramAccountToCompany(params: {
     } catch (err: any) {
       const msg = String(err?.message || '');
       if (msg.startsWith('CROSS_TENANT_VIOLATION')) {
-        return { ok: false, status: 403, reasonCode: 'CROSS_TENANT_VIOLATION', userMessage: 'Esta conta do Instagram já está vinculada a outra empresa.', step: '3_BLOQUEIO_VINCULACAO_OUTRA_EMPRESA' };
+        return { ok: false, status: 403, reasonCode: 'CROSS_TENANT_VIOLATION', userMessage: 'Este Instagram já está vinculado a outra conta do ATO Social Hub.', step: '3_BLOQUEIO_VINCULACAO_OUTRA_EMPRESA' };
       }
       if (msg.startsWith('USERNAME_CONFLICT')) {
         return { ok: false, status: 409, reasonCode: 'USERNAME_CONFLICT', userMessage: 'Este @ já está associado a outro cadastro. Solicite ajuda ao administrador.', step: '3_CONFLITO_USERNAME' };
@@ -2675,7 +2675,7 @@ async function linkInstagramAccountToCompany(params: {
   };
 
   if (existingByIgId && stateTenant && !sameCompany(existingByIgId, stateTenant)) {
-    return { ok: false, status: 403, reasonCode: 'CROSS_TENANT_VIOLATION', userMessage: 'Esta conta do Instagram já está vinculada a outra empresa.', step: '3_BLOQUEIO_VINCULACAO_OUTRA_EMPRESA' };
+    return { ok: false, status: 403, reasonCode: 'CROSS_TENANT_VIOLATION', userMessage: 'Este Instagram já está vinculado a outra conta do ATO Social Hub.', step: '3_BLOQUEIO_VINCULACAO_OUTRA_EMPRESA' };
   }
 
   if (!existingByIgId && stateTenant) {
@@ -2742,7 +2742,7 @@ async function linkInstagramAccountToCompany(params: {
   } catch (err: any) {
     const msg = String(err?.message || '');
     if (msg.startsWith('CROSS_TENANT_VIOLATION')) {
-      return { ok: false, status: 403, reasonCode: 'CROSS_TENANT_VIOLATION', userMessage: 'Esta conta do Instagram já está vinculada a outra empresa.', step: '3_BLOQUEIO_VINCULACAO_OUTRA_EMPRESA' };
+      return { ok: false, status: 403, reasonCode: 'CROSS_TENANT_VIOLATION', userMessage: 'Este Instagram já está vinculado a outra conta do ATO Social Hub.', step: '3_BLOQUEIO_VINCULACAO_OUTRA_EMPRESA' };
     }
     if (msg.startsWith('USERNAME_CONFLICT')) {
       return { ok: false, status: 409, reasonCode: 'USERNAME_CONFLICT', userMessage: 'Este @ já está associado a outro cadastro. Solicite ajuda ao administrador.', step: '3_CONFLITO_USERNAME' };

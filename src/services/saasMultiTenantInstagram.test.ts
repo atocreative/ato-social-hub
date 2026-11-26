@@ -460,6 +460,8 @@ describe('ATO Social Hub — SaaS Multiusuário, Multiempresa e Ciclo Automátic
     });
 
     const jwtSecret = String(process.env.JWT_SECRET || 'ato_super_secret_key_2026_998877').trim();
+    // Usuário real da empresa B (o portão de acesso lê o vínculo no banco).
+    await dbQuery(`INSERT INTO users (id,email,name,role,status,instagram_account_id) VALUES ($1,$2,'Clínica Prime B','TENANT','APROVADO',$3) ON CONFLICT (id) DO NOTHING`, [`usr_${companyBAccountId}`, `b.${companyBAccountId}@seed.test`, companyBAccountId]);
     const tenantBToken = jwt.sign(
       {
         id: `usr_${companyBAccountId}`,
@@ -724,6 +726,7 @@ describe('ATO Social Hub — SaaS Multiusuário, Multiempresa e Ciclo Automátic
     // 8a. Callback quando a conta externa não tem função no app (Standard Access): a Meta devolve o erro
     // junto com o state. O fluxo precisa ter sido iniciado por usuário autenticado (state válido).
     const jwtSecretForState = String(process.env.JWT_SECRET || '').trim();
+    await dbQuery(`INSERT INTO users (id,email,name,role,status,instagram_account_id) VALUES ('usr_tenant_ato_vc','ato.vc.seed@seed.test','Ato','TENANT','APROVADO','tenant_ato_vc') ON CONFLICT (id) DO NOTHING`);
     const tenantToken = jwt.sign(
       { id: 'usr_tenant_ato_vc', nome: 'Ato', role: 'TENANT', tenantId: 'tenant_ato_vc' },
       jwtSecretForState,
