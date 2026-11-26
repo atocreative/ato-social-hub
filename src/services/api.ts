@@ -669,8 +669,7 @@ export const api = {
   // Google Apps Script Integration Config & Tokens
   getGasConfig: async (): Promise<{
     webhookUrl: string;
-    webhookSecretToken: string;
-    tenYearJwt: string;
+    webhookSecretConfigured: boolean;
     gasWebhookUrl: string;
     gasProjectUrl: string;
   }> => {
