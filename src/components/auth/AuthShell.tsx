@@ -64,6 +64,7 @@ export const AuthShell: React.FC<{ children: React.ReactNode; onNavigateLegal?: 
             style={{ left: `${s.x}%`, top: `${s.y}%`, width: s.r, height: s.r, opacity: s.o, animationDelay: `${s.d}s` }}
           />
         ))}
+        <BrandLogo variant="dot" height={36} />
         <div className="relative flex-1 flex items-center justify-center min-h-[240px]">
           {RINGS.map((r) => (
             <div
