@@ -2590,7 +2590,7 @@ async function linkInstagramAccountToCompany(params: {
         reasonCode: 'ACCOUNT_NOT_AUTHORIZED_IN_META_APP',
         userMessage: IG_USER_MSG_PERMISSION_RESTRICTED,
       });
-      return { ok: false, status: 400, reasonCode: 'ACCOUNT_NOT_AUTHORIZED_IN_META_APP', userMessage: IG_USER_MSG_PERMISSION_RESTRICTED, step: '2_GET_INSTAGRAM_ACCOUNT' };
+      return { ok: false, status: 400, reasonCode: 'ACCOUNT_NOT_AUTHORIZED_IN_META_APP', userMessage: IG_USER_MSG_PERMISSION_RESTRICTED, step: `2_GET_INSTAGRAM_ACCOUNT.http${profRes.status}${profile?.error?.code !== undefined ? '.meta' + profile.error.code : ''}${profile?.error?.error_subcode !== undefined ? '.sub' + profile.error.error_subcode : ''}${!profile?.error && !profile?.username ? '.sem_username' : ''}` };
     }
   } catch {
     return { ok: false, status: 502, reasonCode: 'TEMPORARY_TECHNICAL_ERROR', userMessage: IG_USER_MSG_TEMPORARY_ERROR, step: '2_GET_INSTAGRAM_ACCOUNT' };
