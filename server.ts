@@ -4786,6 +4786,42 @@ const instagramMediaBufferCache = new Map<
 >();
 
 /**
+ * Mídia enviada pela plataforma que não chegou ao Drive (id "upload_…"): a imagem existe só no próprio registro
+ * (data URL ou URL http). Devolve o conteúdo para o proxy público entregar à Meta.
+ */
+async function loadUploadedMediaBuffer(
+  uploadId: string,
+  fallbackItem?: DriveImageItem
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  const item =
+    (fallbackItem && fallbackItem.driveFileId === uploadId ? fallbackItem : undefined) ||
+    rawDriveItems.find((i) => i.driveFileId === uploadId);
+  if (!item) return null;
+  for (const src of [item.viewUrl, item.thumbnailUrl]) {
+    if (!src) continue;
+    const m = /^data:([^;,]+);base64,([\s\S]*)$/.exec(src);
+    if (m) {
+      const buffer = Buffer.from(m[2], 'base64');
+      if (buffer.length > 0) return { buffer, contentType: m[1] || 'image/jpeg' };
+      continue;
+    }
+    if (/^https?:\/\//i.test(src)) {
+      try {
+        const resp = await fetch(src, { redirect: 'follow' });
+        const ct = resp.headers.get('content-type') || '';
+        if (resp.ok && ct.startsWith('image/')) {
+          const buffer = Buffer.from(await resp.arrayBuffer());
+          if (buffer.length > 0) return { buffer, contentType: ct };
+        }
+      } catch {
+        // tenta a próxima origem
+      }
+    }
+  }
+  return null;
+}
+
+/**
  * Bypass do Google Drive para a Graph API da Meta:
  * 1. Faz o download do buffer/stream da imagem em alta resolução no backend (contornando bloqueios de redirecionamento do Drive)
  *    e armazena em cache para streaming direto via /api/instagram/media-proxy/:driveFileId.
@@ -4815,6 +4851,16 @@ async function prepareDriveMediaForInstagram(
   let resolvedCdnUrl = googleUserContentUrl;
   let bufferSize = 0;
   let contentType = 'image/jpeg';
+
+  if (cleanFileId.startsWith('upload_')) {
+    const up = await loadUploadedMediaBuffer(cleanFileId, fallbackItem);
+    if (up) {
+      instagramMediaBufferCache.set(cleanFileId, { buffer: up.buffer, contentType: up.contentType, resolvedCdnUrl: localProxyUrl, updatedAt: Date.now() });
+      console.log(`[Instagram Bypass Drive] Mídia enviada pela plataforma "${cleanFileId}" servida pelo proxy (${up.buffer.length} bytes).`);
+      return { primaryImageUrl: localProxyUrl, fallbackUrls: [localProxyUrl], bufferSize: up.buffer.length, contentType: up.contentType };
+    }
+    console.warn(`[Instagram Bypass Drive] Mídia "${cleanFileId}" não está no Drive e não tem conteúdo no registro.`);
+  }
 
   // Faz fetch real da imagem do Google Drive seguindo redirecionamentos para obter o buffer e a URL final do CDN
   const candidateFetchUrls = [highResThumbUrl, directDownloadUrl];
