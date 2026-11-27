@@ -112,7 +112,8 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
                 clientName &&
                 t.driveFolderName.toLowerCase() === clientName.toLowerCase())
           );
-          const effectiveList = companyScoped.length > 0 ? companyScoped : allList;
+          // Nunca cai para a lista de todas as contas: escolher a conta de outra empresa (ex.: @ato.vc) é bloqueado pelo isolamento.
+          const effectiveList = companyScoped;
           setAccounts(effectiveList);
 
           const matched =
@@ -122,8 +123,7 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
                 t.driveFolderName &&
                 clientName &&
                 t.driveFolderName.toLowerCase() === clientName.toLowerCase()
-            ) ||
-            effectiveList[0];
+            );
           setSelectedAccountId(matched ? matched.id : '');
         })
         .catch(() => {});
