@@ -5297,6 +5297,8 @@ function markTenantReconnectionNeeded(tenant: TenantAccount, reason: string): vo
  * Verifica se uma conta do Instagram pertence à mesma empresa do PostGroup.
  */
 function isTenantCompatibleWithPost(tenant: TenantAccount, post: PostGroup): boolean {
+  // A empresa (id) é a fonte de verdade; nomes de pasta do Drive podem divergir entre post e conta.
+  if (post.companyId && tenant.companyId) return post.companyId === tenant.companyId;
   const postFolder = (post.pastaClienteNome || post.driveFolderName || '').trim().toLowerCase();
   const acctFolder = (tenant.driveFolderName || '').trim().toLowerCase();
 
@@ -5357,6 +5359,8 @@ function canUserUseInstagramAccount(user: UserProfile | undefined, tenant: Tenan
   if (user.role === 'ADMIN') return true;
 
   if (user.tenantId && tenant.id === user.tenantId) return true;
+  // Conta ativa (não arquivada) da própria empresa do usuário.
+  if (user.companyId && tenant.companyId && user.companyId === tenant.companyId && !String(tenant.instagramUserId || '').startsWith('liberada_')) return true;
   if (user.instagramUserId && tenant.instagramUserId === user.instagramUserId) return true;
   if (user.instagramUsername && tenant.username.toLowerCase() === user.instagramUsername.toLowerCase()) return true;
 
