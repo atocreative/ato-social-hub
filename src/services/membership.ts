@@ -65,15 +65,33 @@ export async function loadFreshAccess(userId: string): Promise<FreshAccess | nul
 
   const active = accessStatus === 'ACTIVE';
   const companyId = active ? row.m_company || row.u_company || row.ia_company || null : null;
+  // A conta da empresa é a que vale. Se o usuário aponta para um registro arquivado/desconectado (ex.: o Instagram foi
+  // reconectado e o registro antigo foi liberado), usa a conta conectada de verdade da própria empresa.
+  let own: { id: any; username: any; igid: any; folder: any; folderId: any; status: any } | null = row.ia_id
+    ? { id: row.ia_id, username: row.ia_username, igid: row.ia_igid, folder: row.ia_folder, folderId: row.ia_folder_id, status: row.ia_status }
+    : null;
+  if (active && companyId) {
+    const ownOk = row.ia_id && row.ia_company === companyId && !String(row.ia_igid || '').startsWith('liberada_');
+    if (!ownOk) {
+      const c = await dbQuery<any>(
+        `SELECT id, username, instagram_user_id, drive_folder_name, drive_folder_id, status FROM instagram_accounts
+          WHERE company_id = $1 AND instagram_user_id NOT LIKE 'liberada\_%'
+          ORDER BY (connection_status = 'CONECTADO') DESC, (instagram_user_id NOT LIKE 'pending_ig_%') DESC, created_at ASC LIMIT 1`,
+        [companyId]
+      );
+      const r0 = c.rows[0];
+      if (r0) own = { id: r0.id, username: r0.username, igid: r0.instagram_user_id, folder: r0.drive_folder_name, folderId: r0.drive_folder_id, status: r0.status };
+    }
+  }
   const tenant =
-    active && row.ia_id
+    active && own
       ? {
-          id: row.ia_id,
-          username: row.ia_username,
-          instagramUserId: row.ia_igid,
-          driveFolderName: row.ia_folder || null,
-          driveFolderId: row.ia_folder_id || null,
-          status: row.ia_status,
+          id: own.id,
+          username: own.username,
+          instagramUserId: own.igid,
+          driveFolderName: own.folder || null,
+          driveFolderId: own.folderId || null,
+          status: own.status,
         }
       : null;
   return {
