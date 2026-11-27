@@ -108,12 +108,16 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
             (t) =>
               t.id === post.scheduledAccountId ||
               t.id === post.tenantId ||
+              Boolean(post.companyId && t.companyId && t.companyId === post.companyId) ||
               (t.driveFolderName &&
                 clientName &&
                 t.driveFolderName.toLowerCase() === clientName.toLowerCase())
           );
           // Nunca cai para a lista de todas as contas: escolher a conta de outra empresa (ex.: @ato.vc) é bloqueado pelo isolamento.
-          const effectiveList = companyScoped;
+          // Única exceção: o servidor já devolve a um usuário comum só a conta da própria empresa dele. Se vier uma só
+          // conta e nada permitir compará-la ao post (sem id de empresa em um dos lados), ela é a conta da empresa.
+          const lone = allList.length === 1 && (!post.companyId || !allList[0].companyId) ? allList : [];
+          const effectiveList = companyScoped.length > 0 ? companyScoped : lone;
           setAccounts(effectiveList);
 
           const matched =
@@ -123,7 +127,9 @@ export const ApprovalModal: React.FC<ApprovalModalProps> = ({
                 t.driveFolderName &&
                 clientName &&
                 t.driveFolderName.toLowerCase() === clientName.toLowerCase()
-            );
+            ) ||
+            effectiveList.find((t) => Boolean(post.companyId && t.companyId === post.companyId)) ||
+            (lone.length === 1 ? lone[0] : undefined);
           setSelectedAccountId(matched ? matched.id : '');
         })
         .catch(() => {});
